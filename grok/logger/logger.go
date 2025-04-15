@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"net/url"
 
-  "github.com/jakeloud/jl/entities"
+	"github.com/jakeloud/jl/entities"
 )
 
 func Log(message string) error {

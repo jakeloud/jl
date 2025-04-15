@@ -1,15 +1,17 @@
 package server
 
 import (
+	"embed"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"net/http"
-	"path/filepath"
 
 	"github.com/jakeloud/jl/api"
 	"github.com/jakeloud/jl/entities"
 )
+
+//go:embed static
+var staticFiles embed.FS
 
 // fileCache stores static file contents in memory.
 var fileCache = make(map[string]string)
@@ -20,14 +22,14 @@ func Start() error {
 		if r.Method == http.MethodGet {
 			// Handle GET requests for static files
 			pathname := r.URL.Path
-			file := "index.html"
+			file := "/index.html"
 			if pathname != "/" {
-				file = "." + pathname
+				file = pathname
 			}
 
 			// Load file into cache if not already present
 			if _, ok := fileCache[file]; !ok {
-				data, err := ioutil.ReadFile(filepath.Join("/etc/jakeloud/jakeloud/static", file))
+				data, err := staticFiles.ReadFile("static" + file)
 				if err != nil {
 					fileCache[file] = "404 Not Found"
 				} else {
@@ -67,6 +69,8 @@ func Start() error {
 		// Unsupported methods
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	})
+
+	return nil
 
 	// Start the server using entities.Start
 	return entities.Start(nil)

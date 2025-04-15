@@ -17,15 +17,15 @@ func ClearCacheOp(params struct {
 		return err
 	}
 
-  if params.Email == "" {
-    return nil
-  }
-  if len(conf.Users) > 0 {
-    isAuth, err := entities.IsAuthenticated(params.Email, params.Password)
-    if err != nil || !isAuth {
-      return nil
-    }
-  }
+	if params.Email == "" {
+		return nil
+	}
+	if len(conf.Users) > 0 {
+		isAuth, err := entities.IsAuthenticated(params.Email, params.Password)
+		if err != nil || !isAuth {
+			return nil
+		}
+	}
 
 	res, err := entities.ClearCache()
 	if err != nil {
