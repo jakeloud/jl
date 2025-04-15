@@ -15,9 +15,15 @@ func SetJakeloudDomain(params struct {
 		return err
 	}
 
-	if params.Email == "" || (len(conf.Users) > 0 && !entities.IsAuthenticated(params.Email, params.Password)) {
-		return nil
-	}
+  if params.Email == "" {
+    return nil
+  }
+  if len(conf.Users) > 0 {
+    isAuth, err := entities.IsAuthenticated(params.Email, params.Password)
+    if !isAuth || err != nil {
+      return nil
+    }
+  }
 
 	jakeloudApp, err := entities.GetApp(entities.JAKELOUD)
 	if err != nil {

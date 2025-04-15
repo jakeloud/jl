@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
-	"strings"
 
 	"github.com/jakeloud/jl/api"
 	"github.com/jakeloud/jl/entities"

@@ -3,8 +3,6 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-
-	"github.com/jakeloud/jl/entities"
 )
 
 // apiRequest represents the expected JSON body structure.

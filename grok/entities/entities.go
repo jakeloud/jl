@@ -46,7 +46,7 @@ type User struct {
 	Salt  string `json:"salt"`
 }
 
-func setConf(conf Config) error {
+func SetConf(conf Config) error {
 	data, err := json.MarshalIndent(conf, "", "  ")
 	if err != nil {
 		return err
@@ -54,7 +54,7 @@ func setConf(conf Config) error {
 	return ioutil.WriteFile(CONF_FILE, data, 0644)
 }
 
-func getConf() (Config, error) {
+func GetConf() (Config, error) {
 	var conf Config
 	data, err := ioutil.ReadFile(CONF_FILE)
 	if err != nil {
@@ -151,7 +151,7 @@ func (app *App) Save() error {
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	conf, err := getConf()
+	conf, err := GetConf()
 	if err != nil {
 		return err
 	}
@@ -170,7 +170,7 @@ func (app *App) Save() error {
 		conf.Apps[appIndex] = *app
 	}
 
-	return setConf(conf)
+	return SetConf(conf)
 }
 
 func (app *App) ShortRepoPath() (string, error) {
@@ -445,7 +445,7 @@ func (app *App) Remove(removeRepo bool) error {
 		}
 	}
 
-	conf, err := getConf()
+	conf, err := GetConf()
 	if err != nil {
 		return err
 	}
@@ -456,7 +456,7 @@ func (app *App) Remove(removeRepo bool) error {
 		}
 	}
 	conf.Apps = newApps
-	return setConf(conf)
+	return SetConf(conf)
 }
 
 func (app *App) IsError() bool {
@@ -485,7 +485,7 @@ func (app *App) Advance(force bool) error {
 }
 
 func GetApp(name string) (App, error) {
-	conf, err := getConf()
+	conf, err := GetConf()
 	if err != nil {
 		return App{}, err
 	}
@@ -498,7 +498,7 @@ func GetApp(name string) (App, error) {
 }
 
 func IsAuthenticated(email, password string) (bool, error) {
-	conf, err := getConf()
+	conf, err := GetConf()
 	if err != nil {
 		return false, err
 	}
@@ -516,7 +516,7 @@ func IsAuthenticated(email, password string) (bool, error) {
 }
 
 func SetUser(email, password string) error {
-	conf, err := getConf()
+	conf, err := GetConf()
 	if err != nil {
 		return err
 	}
@@ -542,5 +542,5 @@ func SetUser(email, password string) error {
 		conf.Users[userIndex] = User{Email: email, Hash: hash, Salt: saltStr}
 	}
 
-	return setConf(conf)
+	return SetConf(conf)
 }

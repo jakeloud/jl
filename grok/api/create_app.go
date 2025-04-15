@@ -77,7 +77,7 @@ func CreateApp(params struct {
 		logMessage = fmt.Sprintf("*%s* Failed to start\\. _%ds_", app.Name, dt)
 	}
 
-	if err := telegram.Log(logMessage); err != nil {
+	if err := logger.Log(logMessage); err != nil {
 		return fmt.Errorf("failed to log app status: %v", err)
 	}
 
