@@ -311,7 +311,7 @@ server {
 		}
 	}
 
-	if _, err := execWrapped("systemctl restart nginx"); err != nil {
+	if _, err := execWrapped("service nginx restart"); err != nil {
 		app.mu.Lock()
 		app.State = fmt.Sprintf("Error: %v", err)
 		app.mu.Unlock()
