@@ -2,8 +2,6 @@ package server
 
 import (
 	"embed"
-	"encoding/json"
-	"io"
 	"net/http"
 
 	"github.com/jakeloud/jl/api"
@@ -45,6 +43,7 @@ func Start() error {
 		if r.Method == http.MethodPost {
 			// Handle POST requests
 			// Limit body size to 1024 bytes
+      /*
 			r.Body = http.MaxBytesReader(w, r.Body, 1024)
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
@@ -60,6 +59,7 @@ func Start() error {
 			} else {
 				parsedBody = make(map[string]interface{})
 			}
+      */
 
 			// Delegate to API handler
 			api.API(w, r)

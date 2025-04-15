@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+  "log"
 )
 
 // apiRequest represents the expected JSON body structure.
@@ -26,6 +27,7 @@ func API(w http.ResponseWriter, r *http.Request) {
 
 	var body apiRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+    log.Println(err)
 		http.Error(w, `{"message":"invalid request body"}`, http.StatusBadRequest)
 		return
 	}
