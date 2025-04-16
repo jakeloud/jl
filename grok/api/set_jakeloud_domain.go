@@ -2,21 +2,19 @@ package api
 
 import (
 	"github.com/jakeloud/jl/entities"
+
+	"errors"
 )
 
 // SetJakeloudDomain updates the domain and email of the JAKELOUD app if authenticated.
-func SetJakeloudDomain(params struct {
-	Email    string
-	Password string
-	Domain   string
-}) error {
+func SetJakeloudDomain(params apiRequest) error {
 	conf, err := entities.GetConf()
 	if err != nil {
 		return err
 	}
 
 	if params.Email == "" {
-		return nil
+		return errors.New("Email is required")
 	}
 	if len(conf.Users) > 0 {
 		isAuth, err := entities.IsAuthenticated(params.Email, params.Password)

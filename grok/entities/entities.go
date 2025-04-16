@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
@@ -23,6 +24,18 @@ const (
 	SSH_KEY     = "/etc/jakeloud/id_rsa"
 	SSH_KEY_PUB = "/etc/jakeloud/id_rsa.pub"
 )
+
+var default_conf = Config{
+	Apps:  []App{{Name: JAKELOUD, Port: 666}},
+	Users: []User{},
+}
+
+var dry bool = false
+var dry_conf Config = default_conf
+
+func SetDry(d bool) {
+	dry = d
+}
 
 type App struct {
 	Name       string                 `json:"name"`
@@ -51,18 +64,25 @@ func SetConf(conf Config) error {
 	if err != nil {
 		return err
 	}
+
+	if dry {
+		dry_conf = conf
+		return nil
+	}
+
 	return ioutil.WriteFile(CONF_FILE, data, 0644)
 }
 
 func GetConf() (Config, error) {
+	if dry {
+		return dry_conf, nil
+	}
+
 	var conf Config
 	data, err := ioutil.ReadFile(CONF_FILE)
 	if err != nil {
 		fmt.Printf("Problem with conf.json: %v\n", err)
-		conf = Config{
-			Apps:  []App{{Name: JAKELOUD, Port: 666}},
-			Users: []User{},
-		}
+		conf = default_conf
 		return conf, nil
 	}
 	if err := json.Unmarshal(data, &conf); err != nil {
@@ -72,6 +92,11 @@ func GetConf() (Config, error) {
 }
 
 func execWrapped(cmd string) (string, error) {
+	if dry {
+		slog.Info("Executing", "cmd", cmd)
+		return "", nil
+	}
+
 	output, err := exec.Command("sh", "-c", cmd).CombinedOutput()
 	if err != nil {
 		return string(output), err
@@ -80,6 +105,10 @@ func execWrapped(cmd string) (string, error) {
 }
 
 func ClearCache() (string, error) {
+	if dry {
+		return "", nil
+	}
+
 	res, err := execWrapped("docker system prune -af")
 	if err != nil {
 		return err.Error(), err
@@ -88,34 +117,34 @@ func ClearCache() (string, error) {
 }
 
 func Start(server interface{}) error {
-	// Note: Go doesn't use the same server model as Node.js.
-	// This is a placeholder and would need actual server implementation.
 	app, err := GetApp(JAKELOUD)
 	if err != nil {
 		return err
 	}
 
-	if _, err := os.Stat(SSH_KEY); os.IsNotExist(err) {
-		_, err := execWrapped(`ssh-keygen -q -t ed25519 -N '' -f ` + SSH_KEY)
+	if !dry {
+		if _, err := os.Stat(SSH_KEY); os.IsNotExist(err) {
+			_, err := execWrapped(`ssh-keygen -q -t ed25519 -N '' -f ` + SSH_KEY)
+			if err != nil {
+				return err
+			}
+		}
+
+		sshKey, err := ioutil.ReadFile(SSH_KEY_PUB)
 		if err != nil {
 			return err
 		}
-	}
 
-	sshKey, err := ioutil.ReadFile(SSH_KEY_PUB)
-	if err != nil {
-		return err
-	}
+		app.mu.Lock()
+		if app.Additional == nil {
+			app.Additional = make(map[string]interface{})
+		}
+		app.Additional["sshKey"] = string(sshKey)
+		app.mu.Unlock()
 
-	app.mu.Lock()
-	if app.Additional == nil {
-		app.Additional = make(map[string]interface{})
-	}
-	app.Additional["sshKey"] = string(sshKey)
-	app.mu.Unlock()
-
-	if err := app.Save(); err != nil {
-		return err
+		if err := app.Save(); err != nil {
+			return err
+		}
 	}
 
 	// Simulate server listening
@@ -272,6 +301,11 @@ func (app *App) Proxy() error {
 		return err
 	}
 
+	server_name := "undefined"
+	if app.Domain != "" {
+		server_name = app.Domain
+	}
+
 	content := fmt.Sprintf(`
 server {
 	listen 80;
@@ -286,15 +320,20 @@ server {
 		proxy_set_header Upgrade $http_upgrade;
 		proxy_set_header Connection "upgrade";
 	}
-}`, app.Domain, app.Port)
+}`, server_name, app.Port)
 
 	file := "default"
 	if app.Name != JAKELOUD {
 		file = app.Name
 	}
 	filePath := fmt.Sprintf("/etc/nginx/sites-available/%s", file)
-	if err := ioutil.WriteFile(filePath, []byte(content), 0644); err != nil {
-		return err
+
+	if dry {
+		slog.Info("Writing", "file", filePath, "content", content)
+	} else {
+		if err := ioutil.WriteFile(filePath, []byte(content), 0644); err != nil {
+			return err
+		}
 	}
 
 	if _, err := execWrapped("nginx -t"); err != nil {
@@ -305,9 +344,13 @@ server {
 	}
 
 	enabledPath := fmt.Sprintf("/etc/nginx/sites-enabled/%s", file)
-	if _, err := os.Stat(enabledPath); os.IsNotExist(err) {
-		if err := os.Symlink(filePath, enabledPath); err != nil {
-			return err
+	if dry {
+		slog.Info("Enabling", "path", enabledPath)
+	} else {
+		if _, err := os.Stat(enabledPath); os.IsNotExist(err) {
+			if err := os.Symlink(filePath, enabledPath); err != nil {
+				return err
+			}
 		}
 	}
 

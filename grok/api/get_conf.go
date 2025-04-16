@@ -5,10 +5,7 @@ import (
 )
 
 // GetConf retrieves the configuration based on user authentication.
-func GetConf(params struct {
-	Email    string
-	Password string
-}) (interface{}, error) {
+func GetConf(params apiRequest) (interface{}, error) {
 	conf, err := entities.GetConf()
 	if err != nil {
 		return nil, err

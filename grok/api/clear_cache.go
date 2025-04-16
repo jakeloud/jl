@@ -8,10 +8,7 @@ import (
 )
 
 // ClearCacheOp clears the Docker cache if the user is authenticated.
-func ClearCacheOp(params struct {
-	Email    string
-	Password string
-}) error {
+func ClearCacheOp(params apiRequest) error {
 	conf, err := entities.GetConf()
 	if err != nil {
 		return err

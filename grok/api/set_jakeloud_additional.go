@@ -5,11 +5,7 @@ import (
 )
 
 // SetJakeloudAdditional updates the additional field of the JAKELOUD app if authenticated and authorized.
-func SetJakeloudAdditional(params struct {
-	Additional map[string]interface{}
-	Email      string
-	Password   string
-}) error {
+func SetJakeloudAdditional(params apiRequest) error {
 	if params.Additional == nil {
 		return nil
 	}

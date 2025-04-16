@@ -2,8 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
-  "log"
 )
 
 // apiRequest represents the expected JSON body structure.
@@ -18,130 +18,47 @@ type apiRequest struct {
 	Additional    map[string]interface{} `json:"additional"`
 }
 
-// API handles incoming HTTP requests by dispatching to the appropriate operation.
 func API(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	var body apiRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, `{"message":"invalid request body"}`, http.StatusBadRequest)
+		slog.Info("invalid json")
 		return
 	}
 
-	var body apiRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-    log.Println(err)
-		http.Error(w, `{"message":"invalid request body"}`, http.StatusBadRequest)
-		return
-	}
+	slog.Info("API", "params", body)
+
+	var err error
 
 	switch body.Op {
 	case "setJakeloudDomainOp":
-		err := SetJakeloudDomain(struct {
-			Email    string
-			Password string
-			Domain   string
-		}{
-			Email:    body.Email,
-			Password: body.Password,
-			Domain:   body.Domain,
-		})
-		if err != nil {
-			http.Error(w, `{"message":"operation failed"}`, http.StatusInternalServerError)
-			return
-		}
+		err = SetJakeloudDomain(body)
 	case "setJakeloudAdditionalOp":
-		err := SetJakeloudAdditional(struct {
-			Additional map[string]interface{}
-			Email      string
-			Password   string
-		}{
-			Additional: body.Additional,
-			Email:      body.Email,
-			Password:   body.Password,
-		})
-		if err != nil {
-			http.Error(w, `{"message":"operation failed"}`, http.StatusInternalServerError)
-			return
-		}
+		err = SetJakeloudAdditional(body)
 	case "registerOp":
-		err := Register(struct {
-			Password string
-			Email    string
-		}{
-			Password: body.Password,
-			Email:    body.Email,
-		})
-		if err != nil {
-			http.Error(w, `{"message":"operation failed"}`, http.StatusInternalServerError)
-			return
-		}
+		err = Register(body)
 	case "getConfOp":
-		result, err := GetConf(struct {
-			Email    string
-			Password string
-		}{
-			Email:    body.Email,
-			Password: body.Password,
-		})
-		if err != nil {
-			http.Error(w, `{"message":"operation failed"}`, http.StatusInternalServerError)
-			return
-		}
-		if result != nil {
-			data, _ := json.Marshal(result)
-			w.Header().Set("Content-Type", "application/json")
-			w.Write(data)
-			return
+		result, err := GetConf(body)
+		if err == nil && result != nil {
+			data, err := json.Marshal(result)
+			if err == nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.Write(data)
+			}
 		}
 	case "createAppOp":
-		err := CreateApp(struct {
-			Domain        string
-			Repo          string
-			Name          string
-			DockerOptions string
-			Password      string
-			Email         string
-		}{
-			Domain:        body.Domain,
-			Repo:          body.Repo,
-			Name:          body.Name,
-			DockerOptions: body.DockerOptions,
-			Password:      body.Password,
-			Email:         body.Email,
-		})
-		if err != nil {
-			http.Error(w, `{"message":"operation failed"}`, http.StatusInternalServerError)
-			return
-		}
+		err = CreateApp(body)
 	case "deleteAppOp":
-		err := DeleteApp(struct {
-			Name     string
-			Email    string
-			Password string
-		}{
-			Name:     body.Name,
-			Email:    body.Email,
-			Password: body.Password,
-		})
-		if err != nil {
-			http.Error(w, `{"message":"operation failed"}`, http.StatusInternalServerError)
-			return
-		}
+		err = DeleteApp(body)
 	case "clearCacheOp":
-		err := ClearCacheOp(struct {
-			Email    string
-			Password string
-		}{
-			Email:    body.Email,
-			Password: body.Password,
-		})
-		if err != nil {
-			http.Error(w, `{"message":"operation failed"}`, http.StatusInternalServerError)
-			return
-		}
+		err = ClearCacheOp(body)
 	default:
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"message":"noop"}`))
 		return
 	}
-
-	w.WriteHeader(http.StatusOK)
+	if err != nil {
+		slog.Info("API error", "err", err)
+		http.Error(w, `{"message":"operation failed"}`, http.StatusInternalServerError)
+	}
 }

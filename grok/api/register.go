@@ -5,10 +5,7 @@ import (
 )
 
 // Register creates a new user if registration is allowed and inputs are valid.
-func Register(params struct {
-	Password string
-	Email    string
-}) error {
+func Register(params apiRequest) error {
 	conf, err := entities.GetConf()
 	if err != nil {
 		return err

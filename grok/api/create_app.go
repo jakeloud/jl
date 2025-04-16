@@ -9,14 +9,7 @@ import (
 )
 
 // CreateApp creates and starts a new application with the provided parameters.
-func CreateApp(params struct {
-	Domain        string
-	Repo          string
-	Name          string
-	DockerOptions string
-	Password      string
-	Email         string
-}) error {
+func CreateApp(params apiRequest) error {
 	startTime := time.Now()
 
 	// Validate authentication and required fields

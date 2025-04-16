@@ -5,11 +5,7 @@ import (
 )
 
 // DeleteApp stops and removes an application if the user is authenticated.
-func DeleteApp(params struct {
-	Name     string
-	Email    string
-	Password string
-}) error {
+func DeleteApp(params apiRequest) error {
 	app, err := entities.GetApp(params.Name)
 	if err != nil {
 		return nil // Silently return if app not found

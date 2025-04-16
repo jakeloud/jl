@@ -5,9 +5,7 @@ RUN mkdir -p /etc/jakeloud /etc/jakeloud/jakeloud-static /var/log/jakeloud
 RUN echo '{ \
   "apps": [{ \
     "name": "jakeloud", \
-    "domain": "jl.127.0.0.1.sslip.io", \
     "port": 666, \
-    "state": "building" \
   }], \
   "users": [] \
 }' > /etc/jakeloud/conf.json
