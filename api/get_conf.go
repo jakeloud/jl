@@ -12,13 +12,6 @@ func GetConf(params apiRequest) (interface{}, error) {
 	}
 
 	if len(conf.Users) == 0 {
-		jakeloudApp, err := entities.GetApp(entities.JAKELOUD)
-		if err != nil {
-			return nil, err
-		}
-		if jakeloudApp.Domain == "" {
-			return map[string]string{"message": "domain"}, nil
-		}
 		return map[string]string{"message": "register"}, nil
 	}
 

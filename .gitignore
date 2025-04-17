@@ -1,2 +1,5 @@
 jl
 jl.exe
+
+server/dist
+node_modules
