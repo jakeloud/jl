@@ -1,22 +1,10 @@
 import { useState, useEffect } from 'react';
-import Register from './pages/register'
+import Register from '@/pages/register'
+import api from '@/api'
 
 const setLoginData = (pwd, email) => {
   window.localStorage.setItem('pwd', pwd);
   window.localStorage.setItem('email', email);
-};
-
-const getLoginData = () => {
-  const password = window.localStorage.getItem('pwd');
-  const email = window.localStorage.getItem('email');
-  return { password, email };
-};
-
-const api = async (op, body = {}) => {
-  return await fetch('/api', {
-    method: 'POST',
-    body: JSON.stringify({ op, ...getLoginData(), ...body }),
-  });
 };
 
 const Field = ({ name, type = 'text', initialValue = null }) => {

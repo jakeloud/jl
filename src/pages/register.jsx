@@ -1,4 +1,4 @@
-import api from '../api'
+import api from '@/api'
 import styles from './register.module.css'
 
 const formDataToJSON = (formData) => {
@@ -7,17 +7,17 @@ const formDataToJSON = (formData) => {
   return object
 }
 const setLoginData = (pwd, email) => {
-  window.localStorage.setItem('pwd', pwd);
-  window.localStorage.setItem('email', email);
-};
+  window.localStorage.setItem('pwd', pwd)
+  window.localStorage.setItem('email', email)
+}
 
 export default function Register({ getConf }) {
   const handleRegister = async (e) => {
-    e.preventDefault();
-    const data = new FormData(e.target);
-    setLoginData(data.get('password'), data.get('email'));
-    api('registerOp', formDataToJSON(data));
-    await getConf();
+    e.preventDefault()
+    const data = new FormData(e.target)
+    setLoginData(data.get('password'), data.get('email'))
+    api('registerOp', formDataToJSON(data))
+    await getConf()
   };
 
   return (
