@@ -21,5 +21,12 @@ func Register(params apiRequest) error {
 		return nil
 	}
 
+	if len(conf.Users) == 0 {
+		jakeloudApp.Email = params.Email
+		if err := jakeloudApp.Save(); err != nil {
+			return err
+		}
+	}
+
 	return entities.SetUser(params.Email, params.Password)
 }

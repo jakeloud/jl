@@ -288,7 +288,16 @@ func (app *App) Clone() error {
 
 	repoPath, err := app.ShortRepoPath()
 	if err != nil {
-		return err
+		if LOG_MUTEX {
+			slog.Info("Lock", "app", app.Name)
+		}
+		app.mu.Lock()
+		app.State = fmt.Sprintf("Error: %v", err)
+		app.mu.Unlock()
+		if LOG_MUTEX {
+			slog.Info("Unlock", "app", app.Name)
+		}
+		return app.Save()
 	}
 
 	_, err = execWrapped(fmt.Sprintf(`rm -rf /etc/jakeloud/%s`, repoPath))

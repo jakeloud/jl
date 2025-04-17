@@ -16,7 +16,7 @@ func GetConf(params apiRequest) (interface{}, error) {
 		if err != nil {
 			return nil, err
 		}
-		if jakeloudApp.Email == "" {
+		if jakeloudApp.Domain == "" {
 			return map[string]string{"message": "domain"}, nil
 		}
 		return map[string]string{"message": "register"}, nil

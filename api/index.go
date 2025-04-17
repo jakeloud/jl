@@ -19,7 +19,6 @@ type apiRequest struct {
 }
 
 func API(w http.ResponseWriter, r *http.Request) {
-	slog.Info("api hit")
 	var body apiRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, `{"message":"invalid request body"}`, http.StatusBadRequest)
