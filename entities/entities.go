@@ -23,7 +23,7 @@ const (
 	CONF_FILE   = "/etc/jakeloud/conf.json"
 	SSH_KEY     = "/etc/jakeloud/id_rsa"
 	SSH_KEY_PUB = "/etc/jakeloud/id_rsa.pub"
-  LOG_MUTEX = false
+	LOG_MUTEX   = false
 )
 
 var dry bool = false
@@ -72,9 +72,9 @@ func SetConf(conf Config) error {
 func GetConf() (Config, error) {
 	var conf Config
 	if dry {
-    if err := json.Unmarshal(dry_conf, &conf); err != nil {
-      return conf, err
-    }
+		if err := json.Unmarshal(dry_conf, &conf); err != nil {
+			return conf, err
+		}
 		return conf, nil
 	}
 
@@ -82,9 +82,9 @@ func GetConf() (Config, error) {
 	if err != nil {
 		fmt.Printf("Problem with conf.json: %v\n", err)
 		conf = Config{
-      Apps:  []App{{Name: JAKELOUD, Port: 666}},
-      Users: []User{},
-    }
+			Apps:  []App{{Name: JAKELOUD, Port: 666}},
+			Users: []User{},
+		}
 		return conf, nil
 	}
 	if err := json.Unmarshal(data, &conf); err != nil {
@@ -137,18 +137,18 @@ func Start(server interface{}) error {
 			return err
 		}
 
-    if LOG_MUTEX {
-      slog.Info("Lock", "app", app.Name)
-    }
+		if LOG_MUTEX {
+			slog.Info("Lock", "app", app.Name)
+		}
 		app.mu.Lock()
 		if app.Additional == nil {
 			app.Additional = make(map[string]interface{})
 		}
 		app.Additional["sshKey"] = string(sshKey)
 		app.mu.Unlock()
-    if LOG_MUTEX {
-      slog.Info("Unlock", "app", app.Name)
-    }
+		if LOG_MUTEX {
+			slog.Info("Unlock", "app", app.Name)
+		}
 
 		if err := app.Save(); err != nil {
 			return err
@@ -156,15 +156,15 @@ func Start(server interface{}) error {
 	}
 
 	// Simulate server listening
-  if LOG_MUTEX {
-    slog.Info("Lock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Lock", "app", app.Name)
+	}
 	app.mu.Lock()
 	app.State = "building"
 	app.mu.Unlock()
-  if LOG_MUTEX {
-    slog.Info("Unlock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Unlock", "app", app.Name)
+	}
 
 	if err := app.Save(); err != nil {
 		return err
@@ -176,15 +176,15 @@ func Start(server interface{}) error {
 		return err
 	}
 	if app.Email != "" {
-    if LOG_MUTEX {
-      slog.Info("Lock", "app", app.Name)
-    }
+		if LOG_MUTEX {
+			slog.Info("Lock", "app", app.Name)
+		}
 		app.mu.Lock()
 		app.State = "starting"
 		app.mu.Unlock()
-    if LOG_MUTEX {
-      slog.Info("Unlock", "app", app.Name)
-    }
+		if LOG_MUTEX {
+			slog.Info("Unlock", "app", app.Name)
+		}
 		if err := app.Save(); err != nil {
 			return err
 		}
@@ -197,14 +197,14 @@ func Start(server interface{}) error {
 }
 
 func (app *App) Save() error {
-  if LOG_MUTEX {
-    slog.Info("Lock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Lock", "app", app.Name)
+	}
 	app.mu.Lock()
 	defer app.mu.Unlock()
-  if LOG_MUTEX {
-    slog.Info("Unlock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Unlock", "app", app.Name)
+	}
 
 	conf, err := GetConf()
 	if err != nil {
@@ -242,15 +242,15 @@ func (app *App) LoadState() error {
 	if err != nil {
 		return err
 	}
-  if LOG_MUTEX {
-    slog.Info("Lock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Lock", "app", app.Name)
+	}
 	app.mu.Lock()
 	app.State = loadedApp.State
 	app.mu.Unlock()
-  if LOG_MUTEX {
-    slog.Info("Unlock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Unlock", "app", app.Name)
+	}
 	return nil
 }
 
@@ -258,15 +258,15 @@ func (app *App) Clone() error {
 	if err := app.LoadState(); err != nil {
 		return err
 	}
-  if LOG_MUTEX {
-    slog.Info("Lock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Lock", "app", app.Name)
+	}
 	app.mu.Lock()
 	app.State = "cloning"
 	app.mu.Unlock()
-  if LOG_MUTEX {
-    slog.Info("Unlock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Unlock", "app", app.Name)
+	}
 	if err := app.Save(); err != nil {
 		return err
 	}
@@ -278,30 +278,30 @@ func (app *App) Clone() error {
 
 	_, err = execWrapped(fmt.Sprintf(`rm -rf /etc/jakeloud/%s`, repoPath))
 	if err != nil {
-    if LOG_MUTEX {
-      slog.Info("Lock", "app", app.Name)
-    }
+		if LOG_MUTEX {
+			slog.Info("Lock", "app", app.Name)
+		}
 		app.mu.Lock()
 		app.State = fmt.Sprintf("Error: %v", err)
 		app.mu.Unlock()
-    if LOG_MUTEX {
-      slog.Info("Unlock", "app", app.Name)
-    }
+		if LOG_MUTEX {
+			slog.Info("Unlock", "app", app.Name)
+		}
 		return app.Save()
 	}
 
 	cmd := fmt.Sprintf(`eval "$(ssh-agent -s)"; ssh-add %s; git clone --depth 1 %s /etc/jakeloud/%s; kill $SSH_AGENT_PID`, SSH_KEY, app.Repo, repoPath)
 	_, err = execWrapped(cmd)
 	if err != nil {
-    if LOG_MUTEX {
-      slog.Info("Lock", "app", app.Name)
-    }
+		if LOG_MUTEX {
+			slog.Info("Lock", "app", app.Name)
+		}
 		app.mu.Lock()
 		app.State = fmt.Sprintf("Error: %v", err)
 		app.mu.Unlock()
-    if LOG_MUTEX {
-      slog.Info("Unlock", "app", app.Name)
-    }
+		if LOG_MUTEX {
+			slog.Info("Unlock", "app", app.Name)
+		}
 		return app.Save()
 	}
 	return nil
@@ -314,15 +314,15 @@ func (app *App) Build() error {
 	if app.State != "cloning" {
 		return nil
 	}
-  if LOG_MUTEX {
-    slog.Info("Lock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Lock", "app", app.Name)
+	}
 	app.mu.Lock()
 	app.State = "building"
 	app.mu.Unlock()
-  if LOG_MUTEX {
-    slog.Info("Unlock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Unlock", "app", app.Name)
+	}
 	if err := app.Save(); err != nil {
 		return err
 	}
@@ -335,15 +335,15 @@ func (app *App) Build() error {
 	cmd := fmt.Sprintf(`docker build -t %s /etc/jakeloud/%s`, strings.ToLower(repoPath), repoPath)
 	_, err = execWrapped(cmd)
 	if err != nil {
-    if LOG_MUTEX {
-      slog.Info("Lock", "app", app.Name)
-    }
+		if LOG_MUTEX {
+			slog.Info("Lock", "app", app.Name)
+		}
 		app.mu.Lock()
 		app.State = fmt.Sprintf("Error: %v", err)
 		app.mu.Unlock()
-    if LOG_MUTEX {
-      slog.Info("Unlock", "app", app.Name)
-    }
+		if LOG_MUTEX {
+			slog.Info("Unlock", "app", app.Name)
+		}
 		return app.Save()
 	}
 	return nil
@@ -356,15 +356,15 @@ func (app *App) Proxy() error {
 	if app.State != "building" {
 		return nil
 	}
-  if LOG_MUTEX {
-    slog.Info("Lock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Lock", "app", app.Name)
+	}
 	app.mu.Lock()
 	app.State = "proxying"
 	app.mu.Unlock()
-  if LOG_MUTEX {
-    slog.Info("Unlock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Unlock", "app", app.Name)
+	}
 	if err := app.Save(); err != nil {
 		return err
 	}
@@ -405,15 +405,15 @@ server {
 	}
 
 	if _, err := execWrapped("nginx -t"); err != nil {
-    if LOG_MUTEX {
-      slog.Info("Lock", "app", app.Name)
-    }
+		if LOG_MUTEX {
+			slog.Info("Lock", "app", app.Name)
+		}
 		app.mu.Lock()
 		app.State = fmt.Sprintf("Error: %v", err)
 		app.mu.Unlock()
-    if LOG_MUTEX {
-      slog.Info("Unlock", "app", app.Name)
-    }
+		if LOG_MUTEX {
+			slog.Info("Unlock", "app", app.Name)
+		}
 		return app.Save()
 	}
 
@@ -429,15 +429,15 @@ server {
 	}
 
 	if _, err := execWrapped("service nginx restart"); err != nil {
-    if LOG_MUTEX {
-      slog.Info("Lock", "app", app.Name)
-    }
+		if LOG_MUTEX {
+			slog.Info("Lock", "app", app.Name)
+		}
 		app.mu.Lock()
 		app.State = fmt.Sprintf("Error: %v", err)
 		app.mu.Unlock()
-    if LOG_MUTEX {
-      slog.Info("Unlock", "app", app.Name)
-    }
+		if LOG_MUTEX {
+			slog.Info("Unlock", "app", app.Name)
+		}
 		return app.Save()
 	}
 	return nil
@@ -450,15 +450,15 @@ func (app *App) Start() error {
 	if app.State != "proxying" {
 		return nil
 	}
-  if LOG_MUTEX {
-    slog.Info("Lock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Lock", "app", app.Name)
+	}
 	app.mu.Lock()
 	app.State = "starting"
 	app.mu.Unlock()
-  if LOG_MUTEX {
-    slog.Info("Unlock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Unlock", "app", app.Name)
+	}
 	if err := app.Save(); err != nil {
 		return err
 	}
@@ -481,15 +481,15 @@ func (app *App) Start() error {
 	cmd := fmt.Sprintf(`docker run --name %s -d -p %d:80 %s %s`, app.Name, app.Port, dockerOptions, strings.ToLower(repoPath))
 	_, err = execWrapped(cmd)
 	if err != nil {
-    if LOG_MUTEX {
-      slog.Info("Lock", "app", app.Name)
-    }
+		if LOG_MUTEX {
+			slog.Info("Lock", "app", app.Name)
+		}
 		app.mu.Lock()
 		app.State = fmt.Sprintf("Error: %v", err)
 		app.mu.Unlock()
-    if LOG_MUTEX {
-      slog.Info("Unlock", "app", app.Name)
-    }
+		if LOG_MUTEX {
+			slog.Info("Unlock", "app", app.Name)
+		}
 		return app.Save()
 	}
 	return nil
@@ -502,15 +502,15 @@ func (app *App) Cert() error {
 	if app.State != "starting" || app.Domain == "" {
 		return nil
 	}
-  if LOG_MUTEX {
-    slog.Info("Lock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Lock", "app", app.Name)
+	}
 	app.mu.Lock()
 	app.State = "certing"
 	app.mu.Unlock()
-  if LOG_MUTEX {
-    slog.Info("Unlock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Unlock", "app", app.Name)
+	}
 	if err := app.Save(); err != nil {
 		return err
 	}
@@ -518,55 +518,55 @@ func (app *App) Cert() error {
 	cmd := fmt.Sprintf(`certbot -n --agree-tos --email %s --nginx -d %s`, app.Email, app.Domain)
 	_, err := execWrapped(cmd)
 	if err != nil {
-    if LOG_MUTEX {
-      slog.Info("Lock", "app", app.Name)
-    }
+		if LOG_MUTEX {
+			slog.Info("Lock", "app", app.Name)
+		}
 		app.mu.Lock()
 		app.State = fmt.Sprintf("Error: %v", err)
 		app.mu.Unlock()
-    if LOG_MUTEX {
-      slog.Info("Unlock", "app", app.Name)
-    }
+		if LOG_MUTEX {
+			slog.Info("Unlock", "app", app.Name)
+		}
 		return app.Save()
 	}
 
-  if LOG_MUTEX {
-    slog.Info("Lock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Lock", "app", app.Name)
+	}
 	app.mu.Lock()
 	app.State = "🟢 running"
 	app.mu.Unlock()
-  if LOG_MUTEX {
-    slog.Info("Unlock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Unlock", "app", app.Name)
+	}
 	return app.Save()
 }
 
 func (app *App) Stop() error {
-  if LOG_MUTEX {
-    slog.Info("Lock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Lock", "app", app.Name)
+	}
 	app.mu.Lock()
 	app.State = "stopping"
 	app.mu.Unlock()
-  if LOG_MUTEX {
-    slog.Info("Unlock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Unlock", "app", app.Name)
+	}
 	if err := app.Save(); err != nil {
 		return err
 	}
 
 	_, err := execWrapped(fmt.Sprintf(`docker stop %s`, app.Name))
 	if err != nil {
-    if LOG_MUTEX {
-      slog.Info("Lock", "app", app.Name)
-    }
+		if LOG_MUTEX {
+			slog.Info("Lock", "app", app.Name)
+		}
 		app.mu.Lock()
 		app.State = fmt.Sprintf("Error: %v", err)
 		app.mu.Unlock()
-    if LOG_MUTEX {
-      slog.Info("Unlock", "app", app.Name)
-    }
+		if LOG_MUTEX {
+			slog.Info("Unlock", "app", app.Name)
+		}
 		return app.Save()
 	}
 	return nil
@@ -579,15 +579,15 @@ func (app *App) Remove(removeRepo bool) error {
 	if strings.HasPrefix(app.State, "Error") {
 		return nil
 	}
-  if LOG_MUTEX {
-    slog.Info("Lock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Lock", "app", app.Name)
+	}
 	app.mu.Lock()
 	app.State = "removing"
 	app.mu.Unlock()
-  if LOG_MUTEX {
-    slog.Info("Unlock", "app", app.Name)
-  }
+	if LOG_MUTEX {
+		slog.Info("Unlock", "app", app.Name)
+	}
 	if err := app.Save(); err != nil {
 		return err
 	}
@@ -609,15 +609,15 @@ func (app *App) Remove(removeRepo bool) error {
 	for _, cmd := range cmds {
 		_, err := execWrapped(cmd)
 		if err != nil {
-      if LOG_MUTEX {
-        slog.Info("Lock", "app", app.Name)
-      }
+			if LOG_MUTEX {
+				slog.Info("Lock", "app", app.Name)
+			}
 			app.mu.Lock()
 			app.State = fmt.Sprintf("Error: %v", err)
 			app.mu.Unlock()
-      if LOG_MUTEX {
-        slog.Info("Unlock", "app", app.Name)
-      }
+			if LOG_MUTEX {
+				slog.Info("Unlock", "app", app.Name)
+			}
 			return app.Save()
 		}
 	}
