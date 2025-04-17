@@ -3,8 +3,6 @@ package ip_getter
 import (
 	"encoding/csv"
 	"fmt"
-	"io"
-	"log"
 	"net/http"
 )
 

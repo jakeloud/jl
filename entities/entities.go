@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/jakeloud/jl/ip_getter"
 	"golang.org/x/crypto/pbkdf2"
 )
 
@@ -155,7 +156,6 @@ func Start(server interface{}) error {
 		}
 	}
 
-	// Simulate server listening
 	if LOG_MUTEX {
 		slog.Info("Lock", "app", app.Name)
 	}
@@ -164,6 +164,23 @@ func Start(server interface{}) error {
 	app.mu.Unlock()
 	if LOG_MUTEX {
 		slog.Info("Unlock", "app", app.Name)
+	}
+
+	if app.Domain == "" {
+		dom, err := ip_getter.GetPublicIP()
+		if err != nil {
+			slog.Info("Failed to get ip", "err", err)
+			return err
+		}
+		if LOG_MUTEX {
+			slog.Info("Lock", "app", app.Name)
+		}
+		app.mu.Lock()
+		app.Domain = fmt.Sprintf("jakeloud.%s.sslip.io", dom)
+		app.mu.Unlock()
+		if LOG_MUTEX {
+			slog.Info("Unlock", "app", app.Name)
+		}
 	}
 
 	if err := app.Save(); err != nil {
@@ -175,22 +192,20 @@ func Start(server interface{}) error {
 	if err := app.LoadState(); err != nil {
 		return err
 	}
-	if app.Email != "" {
-		if LOG_MUTEX {
-			slog.Info("Lock", "app", app.Name)
-		}
-		app.mu.Lock()
-		app.State = "starting"
-		app.mu.Unlock()
-		if LOG_MUTEX {
-			slog.Info("Unlock", "app", app.Name)
-		}
-		if err := app.Save(); err != nil {
-			return err
-		}
-		if err := app.Cert(); err != nil {
-			return err
-		}
+	if LOG_MUTEX {
+		slog.Info("Lock", "app", app.Name)
+	}
+	app.mu.Lock()
+	app.State = "starting"
+	app.mu.Unlock()
+	if LOG_MUTEX {
+		slog.Info("Unlock", "app", app.Name)
+	}
+	if err := app.Save(); err != nil {
+		return err
+	}
+	if err := app.Cert(); err != nil {
+		return err
 	}
 
 	return nil
@@ -515,7 +530,11 @@ func (app *App) Cert() error {
 		return err
 	}
 
-	cmd := fmt.Sprintf(`certbot -n --agree-tos --email %s --nginx -d %s`, app.Email, app.Domain)
+	email := app.Email
+	if email == "" {
+		email = "no-reply@gmail.com"
+	}
+	cmd := fmt.Sprintf(`certbot -n --agree-tos --email %s --nginx -d %s`, email, app.Domain)
 	_, err := execWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
