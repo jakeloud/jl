@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Register from '@/pages/register'
+import Dashboard from '@/pages/dashboard'
 import api from '@/api'
 
 const setLoginData = (pwd, email) => {
@@ -235,6 +236,7 @@ const App = () => {
       case 'settings':
         return renderSettingsTab();
       default:
+        return <Dashboard apps={conf.apps} />
         return renderAppsTab();
     }
   };
