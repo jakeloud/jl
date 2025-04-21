@@ -50,11 +50,16 @@ export default function Dashboard({apps}) {
                 <h2 className={styles.title}>App - Website</h2>
 
                 <div className={styles.cardcontent}>
-                  <p className="text-sm text-muted-foreground">
-                    Status: <span className="text-foreground">Up 32 hours</span>
+                  <p className={styles.appstatus}>
+                    Status:{' '}
+                    <span className={styles.appstatustext}>
+                      Up 32 hours
+                    </span>
                   </p>
 
-                  <p className="text-xs text-muted-foreground">updated: Mon 12 Apr 2025</p>
+                  <p className={styles.appdate}>
+                    updated: Mon 12 Apr 2025
+                  </p>
                 </div>
               </div>
             </div>
