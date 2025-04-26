@@ -25,5 +25,5 @@ export interface LoginData {
 }
 
 export interface FormData {
-  [key: string]: string
+  [key: string]: any
 }
