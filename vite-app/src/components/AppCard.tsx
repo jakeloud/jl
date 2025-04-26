@@ -1,0 +1,124 @@
+"use client"
+
+import { useState } from "react"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { ExternalLink, RefreshCw, Trash2 } from "lucide-react"
+import type { App } from "../types"
+import { useApi } from "../hooks/useApi"
+import { toast } from "sonner"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+
+interface AppCardProps {
+  app: App
+  refreshConfig: () => void
+}
+
+export function AppCard({ app, refreshConfig }: AppCardProps) {
+  const [isRebooting, setIsRebooting] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const { api } = useApi()
+
+  const handleReboot = async () => {
+    setIsRebooting(true)
+    try {
+      await api("createAppOp", app)
+      toast.success("App reboot initiated")
+      refreshConfig()
+    } catch (error) {
+      toast.error("Failed to reboot app")
+    } finally {
+      setIsRebooting(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    setIsDeleting(true)
+    try {
+      await api("deleteAppOp", app)
+      toast.success("App deletion initiated")
+      refreshConfig()
+    } catch (error) {
+      toast.error("Failed to delete app")
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex justify-between items-start">
+          <div>
+            <CardTitle>{app.name}</CardTitle>
+            <CardDescription>
+              <a
+                href={`https://${app.domain}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center hover:underline"
+              >
+                {app.domain} <ExternalLink className="ml-1 h-3 w-3" />
+              </a>
+            </CardDescription>
+          </div>
+          <Badge variant={app.state === "running" ? "default" : "secondary"}>{app.state}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2 text-sm">
+          <div>
+            <span className="font-medium">Repository:</span> {app.repo}
+          </div>
+          <div>
+            <span className="font-medium">Owner:</span> {app.email}
+          </div>
+          {app.dockerOptions && (
+            <div>
+              <span className="font-medium">Docker Options:</span> {app.dockerOptions}
+            </div>
+          )}
+        </div>
+      </CardContent>
+      <CardFooter className="flex justify-end space-x-2">
+        <Button variant="outline" size="sm" onClick={handleReboot} disabled={isRebooting}>
+          <RefreshCw className="mr-2 h-4 w-4" />
+          {isRebooting ? "Rebooting..." : "Full Reboot"}
+        </Button>
+
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="destructive" size="sm" disabled={isDeleting}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              {isDeleting ? "Deleting..." : "Delete App"}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the app "{app.name}" and remove all
+                associated data.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </CardFooter>
+    </Card>
+  )
+}

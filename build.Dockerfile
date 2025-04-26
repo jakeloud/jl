@@ -3,7 +3,7 @@ FROM node:20.12.0-alpine3.19 AS frontend-stage
 
 WORKDIR /app
 COPY . .
-RUN npm i && npm run build
+RUN cd vite-app && npm i && npm run build
 
 FROM golang:1.23.3 AS build-stage
 
