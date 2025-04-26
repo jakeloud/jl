@@ -44,29 +44,35 @@ function App() {
 
   if (config.message === "login") {
     return (
-      <div className="container mx-auto max-w-md p-6 space-y-6">
-        <Tabs defaultValue="login">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="login">Login</TabsTrigger>
-            <TabsTrigger value="register">Register</TabsTrigger>
-          </TabsList>
-          <TabsContent value="login">
-            <LoginForm onSuccess={getConfig} />
-          </TabsContent>
-          <TabsContent value="register">
-            <RegisterForm onSuccess={getConfig} />
-          </TabsContent>
-        </Tabs>
+      <div className="w-full h-dvh flex items-center justify-center">
+        <div className="w-full container mx-auto max-w-md p-6 space-y-6">
+          <Tabs defaultValue="login">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="login">Login</TabsTrigger>
+              <TabsTrigger value="register">Register</TabsTrigger>
+            </TabsList>
+            <TabsContent value="login">
+              <LoginForm onSuccess={getConfig} />
+            </TabsContent>
+            <TabsContent value="register">
+              <RegisterForm onSuccess={getConfig} />
+            </TabsContent>
+          </Tabs>
+        </div>
       </div>
     )
   }
 
   if (config.message === "register") {
-    return <RegisterForm onSuccess={getConfig} />
+    return (
+      <div className="w-full h-dvh flex items-center justify-center">
+        <RegisterForm onSuccess={getConfig} />
+      </div>
+    )
   }
 
   return (
-    <div className="container mx-auto p-4">
+    <div className="max-w-xl container mx-auto p-4">
       <header className="mb-6">
         <div className="flex justify-between items-center mb-4">
           <h1 className="text-2xl font-bold">Jakeloud Dashboard</h1>

@@ -6,7 +6,7 @@ import "./index.css"
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <ThemeProvider defaultTheme="light" storageKey="jakeloud-theme">
+    <ThemeProvider defaultTheme="system" storageKey="jakeloud-theme">
       <App />
     </ThemeProvider>
   </React.StrictMode>,

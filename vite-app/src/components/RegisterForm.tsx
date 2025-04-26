@@ -48,7 +48,7 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
   }
 
   return (
-    <div className="space-y-4 p-4 border rounded-lg">
+    <div className="w-full max-w-md space-y-4 p-4 border rounded-lg">
       <h2 className="text-lg font-semibold">Register</h2>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
