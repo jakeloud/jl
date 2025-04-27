@@ -1,12 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { ExternalLink, RefreshCw, Trash2 } from "lucide-react"
-import type { App } from "../types"
-import { useApi } from "../hooks/useApi"
+import { Globe, ExternalLink, RefreshCw, Trash2 } from "lucide-react"
+import { App } from "@/types"
+import { useApi } from "@/hooks/useApi"
 import { toast } from "sonner"
 import {
   AlertDialog,
@@ -20,14 +22,30 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 
+
+function getDomainFavicon(domain: string): Promise<string> {
+  return new Promise((resolve) => {
+    setTimeout(() => resolve(''), 60000)
+
+    const url = `https://${domain}/favicon.ico`
+
+    const image = document.createElement('img')
+    image.src = url
+    image.onload = () => {
+      resolve(url)
+    }
+  })
+}
+
 interface AppCardProps {
   app: App
   refreshConfig: () => void
 }
-
 export function AppCard({ app, refreshConfig }: AppCardProps) {
   const [isRebooting, setIsRebooting] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [favicon, setFavicon] = useState("")
+  const [faviconLoading, setFaviconLoading] = useState(true)
   const { api } = useApi()
 
   const handleReboot = async () => {
@@ -58,12 +76,29 @@ export function AppCard({ app, refreshConfig }: AppCardProps) {
 
   const stateShort = app.state.startsWith('Error') ? '🔴 Error' : app.state
 
+  useEffect(() => {
+    getDomainFavicon(app.domain).then(url => {
+      setFavicon(url)
+      setFaviconLoading(false)
+    })
+  }, [app.domain])
+
   return (
     <Card>
       <CardHeader>
         <div className="flex justify-between items-start">
           <div>
-            <CardTitle>{app.name}</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              {faviconLoading ? (
+                <Skeleton className="rounded-full size-8"/>
+              ) : (
+                <Avatar>
+                  <AvatarImage src={favicon} />
+                  <AvatarFallback><Globe/></AvatarFallback>
+                </Avatar>
+              )}
+              {app.name}
+            </CardTitle>
             <CardDescription>
               <a
                 href={`https://${app.domain}`}
