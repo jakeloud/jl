@@ -40,29 +40,52 @@ func setupService(dry bool) error {
 		return fmt.Errorf("failed to get executable path: %v", err)
 	}
 
-	srcFile, err := os.Open(exePath)
-	if err != nil {
-		return fmt.Errorf("failed to open executable: %v", err)
-	}
-	defer srcFile.Close()
+	destPath := filepath.Join("/usr/local/bin", "jl")
+	shouldCopy := exePath == destPath
 
-	destPath := filepath.Join("/etc/jakeloud", "jl")
+	if shouldCopy {
+		fmt.Printf("Copying %s to %s\n", exePath, destPath)
 
-	fmt.Printf("Copying %s to %s\n", exePath, destPath)
-	if !dry {
-		destFile, err := os.Create(destPath)
+		srcFile, err := os.Open(exePath)
 		if err != nil {
-			return fmt.Errorf("failed to create destination file %s: %v", destPath, err)
+			return fmt.Errorf("failed to open executable: %v\n", err)
 		}
-		defer destFile.Close()
+		defer srcFile.Close()
+		if !dry {
+			destFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
+			if err != nil {
+				if err.Error() == "open /usr/local/bin/jl: text file busy" {
+					return fmt.Errorf("Please stop jl with `systemctl stop jakeloud` before updating\n")
+				}
+				return fmt.Errorf("failed to create destination file %s: %v\n", destPath, err)
+			}
+			defer destFile.Close()
 
-		if _, err := io.Copy(destFile, srcFile); err != nil {
-			return fmt.Errorf("failed to copy binary: %v", err)
-		}
+			if _, err := io.Copy(destFile, srcFile); err != nil {
+				return fmt.Errorf("failed to copy binary: %v\n", err)
+			}
 
-		if err := os.Chmod(destPath, 0755); err != nil {
-			return fmt.Errorf("failed to set executable permissions: %v", err)
+			if err := os.Chmod(destPath, 0755); err != nil {
+				return fmt.Errorf("failed to set executable permissions: %v\n", err)
+			}
 		}
+	}
+
+	fmt.Printf("Starting services\n")
+	out, err := execWrapped(dry, "systemctl daemon-reload && systemctl enable jakeloud")
+	if err != nil {
+		if out == "System has not been booted with systemd as init system (PID 1). Can't operate.\nFailed to connect to bus: Host is down" {
+			return fmt.Errorf("Systemclt has not been booted. Please, reboot your machine to enable it.\n")
+		}
+		return fmt.Errorf("failed to enable services: %v\n%s\n", err, out)
+	}
+	out, err = execWrapped(dry, "systemctl start jakeloud")
+	if err != nil {
+		return fmt.Errorf("failed to enable services: %v\n%s\n", err, out)
+	}
+	out, err = execWrapped(dry, "service nginx start && service nginx restart")
+	if err != nil {
+		return fmt.Errorf("failed to enable services: %v\n%s\n", err, out)
 	}
 
 	return nil

@@ -3,6 +3,7 @@ package setup
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -83,12 +84,13 @@ func (m model) View() string {
 func Start(d bool) {
 	dry = d
 	p := tea.NewProgram(initialModel())
+	start := time.Now()
 
 	fmt.Printf("Installing required packages\n")
 	install(dry)
 	err := setupService(dry)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Alas, there's been an error: %v", err)
+		fmt.Fprint(os.Stderr, err)
 		os.Exit(1)
 	}
 
@@ -97,5 +99,11 @@ func Start(d bool) {
 		os.Exit(1)
 	}
 
-	link()
+	l, err := link()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Alas, there's been an error: %v", err)
+		os.Exit(1)
+	}
+	fmt.Printf("JakeLoud successfully installed! 🎊 took %s\n", time.Since(start))
+	fmt.Printf("go to %s to finish installation\n", l)
 }
