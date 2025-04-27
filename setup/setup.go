@@ -3,11 +3,12 @@ package setup
 import (
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+var dry bool = false
 
 type model struct {
 	spinner   spinner.Model
@@ -35,8 +36,11 @@ type finishMsg struct{}
 
 func installDocker() tea.Cmd {
 	return func() tea.Msg {
-		// actually install docker
-		time.Sleep(1 * time.Second)
+		out, err := execWrapped(dry, "apt-get install -y docker.io")
+		if err != nil {
+			fmt.Println(out)
+			fmt.Print(err)
+		}
 
 		return finishMsg{}
 	}
@@ -76,11 +80,12 @@ func (m model) View() string {
 	return fmt.Sprintf("Install docker? [Y/n]")
 }
 
-func Start(dry bool) {
+func Start(d bool) {
+	dry = d
 	p := tea.NewProgram(initialModel())
 
 	fmt.Printf("Installing required packages\n")
-	time.Sleep(3 * time.Second)
+	install(dry)
 	err := setupService(dry)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Alas, there's been an error: %v", err)

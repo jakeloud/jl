@@ -12,6 +12,6 @@ func link() {
 		return
 	}
 	domain := fmt.Sprintf("jakeloud.%s.sslip.io", l)
-	fmt.Println("JakeLoud successfully installed")
+	fmt.Println("JakeLoud successfully installed! 🎊")
 	fmt.Printf("visit https://%s to finish setup\n", domain)
 }
