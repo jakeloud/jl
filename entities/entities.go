@@ -109,6 +109,7 @@ func execWrapped(cmd string) (string, error) {
 
 func ClearCache() (string, error) {
 	if dry {
+		slog.Info("Clearing cache")
 		return "", nil
 	}
 

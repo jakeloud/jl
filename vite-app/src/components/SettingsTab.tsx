@@ -142,8 +142,12 @@ export function SettingsTab({ apps = [], refreshConfig }: SettingsTabProps) {
                 )}
               />
               <p>
-                To get your chatId visit this
-                <a href={`https://api.telegram.org/bot<token>/getUpdates`} className="font-bold">page</a>
+                To get your Chat ID visit this
+                <a
+                  href={`https://api.telegram.org/bot<token>/getUpdates`}
+                  className="ml-1 underline"
+                  target="_blank"
+                >page</a>
               </p>
               <FormField
                 control={form.control}

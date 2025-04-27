@@ -1,6 +1,8 @@
 package logger
 
 import (
+	"fmt"
+	_ "io"
 	"net/http"
 	"net/url"
 
@@ -30,14 +32,31 @@ func Log(message string) error {
 		return nil
 	}
 
-	path := url.PathEscape("/bot" + botToken + "/sendMessage?chat_id=" + chatId + "&parse_mode=MarkdownV2&text=" + message)
-	u := "https://api.telegram.org" + path
+	url := fmt.Sprintf(
+		"https://api.telegram.org/bot%s/sendMessage?chat_id=%s&parse_mode=MarkdownV2&text=%s",
+		botToken,
+		chatId,
+		url.QueryEscape(message),
+	)
 
-	resp, err := http.Get(u)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return err
+	}
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
+
+	/*
+	  body, err := io.ReadAll(resp.Body)
+	  if err != nil {
+	    return err
+	  }
+	  fmt.Printf("%s\n%s\n", url, body)
+	*/
 
 	return nil
 }
