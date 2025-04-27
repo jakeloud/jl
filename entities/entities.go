@@ -271,6 +271,7 @@ func (app *App) LoadState() error {
 }
 
 func (app *App) Clone() error {
+	slog.Info("Cloning", "app", app.Name)
 	if err := app.LoadState(); err != nil {
 		return err
 	}
