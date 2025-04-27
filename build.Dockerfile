@@ -18,3 +18,5 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/jl
 
 FROM scratch
 COPY --from=build-stage /app/jl /app/jl
+
+CMD ["/app/jl --dry -d"]
