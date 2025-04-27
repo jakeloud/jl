@@ -19,10 +19,13 @@ export function AppsTab({ apps = [], refreshConfig }: AppsTabProps) {
 
   return (
     <div className="space-y-6">
+
       {!showCreateForm ? (
-        <Button onClick={() => setShowCreateForm(true)} className="mb-4">
-          <Plus className="mr-2 h-4 w-4" /> Add App
-        </Button>
+        <div className="w-full flex justify-center">
+          <Button onClick={() => setShowCreateForm(true)}>
+            <Plus className="mr-2 h-4 w-4" /> Add App
+          </Button>
+        </div>
       ) : (
         <CreateAppForm
           onSuccess={() => {
@@ -32,8 +35,7 @@ export function AppsTab({ apps = [], refreshConfig }: AppsTabProps) {
           onCancel={() => setShowCreateForm(false)}
         />
       )}
-
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filteredApps.map((app) => (
           <AppCard key={app.name} app={app} refreshConfig={refreshConfig} />
         ))}

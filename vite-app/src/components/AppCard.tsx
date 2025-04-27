@@ -83,9 +83,6 @@ export function AppCard({ app, refreshConfig }: AppCardProps) {
           <div>
             <span className="font-medium">Repository:</span> {app.repo}
           </div>
-          <div>
-            <span className="font-medium">Owner:</span> {app.email}
-          </div>
           {app.dockerOptions && (
             <div>
               <span className="font-medium">Docker Options:</span> {app.dockerOptions}

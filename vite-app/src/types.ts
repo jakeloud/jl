@@ -15,7 +15,7 @@ export interface App {
 }
 
 export interface AppConfig {
-  message?: "domain" | "login" | "register"
+  message?: "login" | "register"
   apps?: App[]
 }
 

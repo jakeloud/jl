@@ -3,16 +3,16 @@
 import { useState, useEffect } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
 import { toast } from 'sonner'
 import { Toaster } from "@/components/ui/sonner"
 import { LoginForm } from "./components/LoginForm"
 import { RegisterForm } from "./components/RegisterForm"
-import { DomainForm } from "./components/DomainForm"
 import { AppsTab } from "./components/AppsTab"
 import { SettingsTab } from "./components/SettingsTab"
 import { useAuth } from "./hooks/useAuth"
 import { useApi } from "./hooks/useApi"
-import type { AppConfig } from "./types"
+import { AppConfig } from "./types"
 
 function App() {
   const [config, setConfig] = useState<AppConfig | null>(null)
@@ -38,26 +38,11 @@ function App() {
     return <div className="flex items-center justify-center h-screen">Loading...</div>
   }
 
-  if (config.message === "domain") {
-    return <DomainForm onSuccess={getConfig} />
-  }
-
   if (config.message === "login") {
     return (
       <div className="w-full h-dvh flex items-center justify-center">
         <div className="w-full container mx-auto max-w-md p-6 space-y-6">
-          <Tabs defaultValue="login">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="login">Login</TabsTrigger>
-              <TabsTrigger value="register">Register</TabsTrigger>
-            </TabsList>
-            <TabsContent value="login">
-              <LoginForm onSuccess={getConfig} />
-            </TabsContent>
-            <TabsContent value="register">
-              <RegisterForm onSuccess={getConfig} />
-            </TabsContent>
-          </Tabs>
+          <LoginForm onSuccess={getConfig} />
         </div>
       </div>
     )
@@ -72,20 +57,28 @@ function App() {
   }
 
   return (
-    <div className="max-w-2xl container mx-auto p-4">
+    <div className="max-w-5xl container mx-auto p-2">
       <header className="mb-6">
-        <div className="flex justify-between items-center mb-4">
-          <h1 className="text-2xl font-bold">Jakeloud Dashboard</h1>
-          <Button variant="outline" onClick={logout}>
-            Logout
-          </Button>
+        <div className="grid grid-cols-3 items-center mb-4">
+          <div className="flex items-center">
+            <img src="/favicon.png" className="size-6"/>
+            <h1 className="text-lg font-bold">JakeLoud</h1>
+          </div>
+          <div className="flex justify-center">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList>
+                <TabsTrigger value="apps">Apps</TabsTrigger>
+                <TabsTrigger value="settings">Settings</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={logout}>
+              Logout
+            </Button>
+          </div>
         </div>
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
-            <TabsTrigger value="apps">Apps</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <Separator/>
       </header>
 
       <main>
