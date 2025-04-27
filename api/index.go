@@ -26,7 +26,7 @@ func API(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("API", "params", body)
+	//slog.Info("API", "params", body)
 
 	var err error
 
