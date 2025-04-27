@@ -33,7 +33,7 @@ export function AppsTab({ apps = [], refreshConfig }: AppsTabProps) {
         />
       )}
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         {filteredApps.map((app) => (
           <AppCard key={app.name} app={app} refreshConfig={refreshConfig} />
         ))}
