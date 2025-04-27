@@ -1,4 +1,4 @@
-package main
+package setup
 
 import (
 	"fmt"
@@ -31,30 +31,30 @@ func (m model) Init() tea.Cmd {
 	return m.spinner.Tick
 }
 
-type finishMsg struct {}
+type finishMsg struct{}
 
 func installDocker() tea.Cmd {
-  return func() tea.Msg {
-    // actually install docker
-    time.Sleep(1 * time.Second)
+	return func() tea.Msg {
+		// actually install docker
+		time.Sleep(1 * time.Second)
 
-    return finishMsg{}
-  }
+		return finishMsg{}
+	}
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-      case "enter", "y", "Y":
-        m.confirmed = true
-        return m, installDocker()
-      case "n", "esc", "ctrl+c":
-        m.quitting = true
-        return m, tea.Quit
+		case "enter", "y", "Y":
+			m.confirmed = true
+			return m, installDocker()
+		case "n", "esc", "ctrl+c":
+			m.quitting = true
+			return m, tea.Quit
 		}
-  case finishMsg:
-    return m, tea.Quit
+	case finishMsg:
+		return m, tea.Quit
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -71,20 +71,26 @@ func (m model) View() string {
 		)
 	}
 	if m.quitting {
-		return "Cancelled.\n"
+		return "NOT installing docker.\n"
 	}
 	return fmt.Sprintf("Install docker? [Y/n]")
 }
 
-func main() {
+func Start(dry bool) {
 	p := tea.NewProgram(initialModel())
 
-  fmt.Printf("Installing required packages\n")
-  time.Sleep(3 * time.Second)
-
-
-	if _, err := p.Run(); err != nil {
+	fmt.Printf("Installing required packages\n")
+	time.Sleep(3 * time.Second)
+	err := setupService(dry)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Alas, there's been an error: %v", err)
 		os.Exit(1)
 	}
+
+	if _, err = p.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Alas, there's been an error: %v", err)
+		os.Exit(1)
+	}
+
+	link()
 }

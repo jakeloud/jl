@@ -7,11 +7,19 @@ import (
 
 	"github.com/jakeloud/jl/entities"
 	"github.com/jakeloud/jl/server"
+	"github.com/jakeloud/jl/setup"
 )
 
 func main() {
 	dry := flag.Bool("dry", false, "Run in dry mode")
+	daemon := flag.Bool("d", false, "Run in daemon mode")
 	flag.Parse()
+
+  if !(*daemon) {
+    setup.Start(*dry)
+    return
+  }
+
 	entities.SetDry(*dry)
 
 	if err := server.Start(); err != nil {
