@@ -358,13 +358,13 @@ func (app *App) Build() error {
 	}
 
 	cmd := fmt.Sprintf(`docker build -t %s /etc/jakeloud/%s`, strings.ToLower(repoPath), repoPath)
-	_, err = execWrapped(cmd)
+	out, err := execWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
 			slog.Info("Lock", "app", app.Name)
 		}
 		app.mu.Lock()
-		app.State = fmt.Sprintf("Error: %v", err)
+		app.State = fmt.Sprintf("Error: %v\n%s", err, out)
 		app.mu.Unlock()
 		if LOG_MUTEX {
 			slog.Info("Unlock", "app", app.Name)
@@ -429,12 +429,12 @@ server {
 		}
 	}
 
-	if _, err := execWrapped("nginx -t"); err != nil {
+	if out, err := execWrapped("nginx -t"); err != nil {
 		if LOG_MUTEX {
 			slog.Info("Lock", "app", app.Name)
 		}
 		app.mu.Lock()
-		app.State = fmt.Sprintf("Error: %v", err)
+		app.State = fmt.Sprintf("Error: %v\n%s", err, out)
 		app.mu.Unlock()
 		if LOG_MUTEX {
 			slog.Info("Unlock", "app", app.Name)
@@ -453,12 +453,12 @@ server {
 		}
 	}
 
-	if _, err := execWrapped("service nginx restart"); err != nil {
+	if out, err := execWrapped("service nginx restart"); err != nil {
 		if LOG_MUTEX {
 			slog.Info("Lock", "app", app.Name)
 		}
 		app.mu.Lock()
-		app.State = fmt.Sprintf("Error: %v", err)
+		app.State = fmt.Sprintf("Error: %v\n%s", err, out)
 		app.mu.Unlock()
 		if LOG_MUTEX {
 			slog.Info("Unlock", "app", app.Name)
@@ -504,13 +504,13 @@ func (app *App) Start() error {
 	}
 
 	cmd := fmt.Sprintf(`docker run --name %s -d -p %d:80 %s %s`, app.Name, app.Port, dockerOptions, strings.ToLower(repoPath))
-	_, err = execWrapped(cmd)
+	out, err = execWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
 			slog.Info("Lock", "app", app.Name)
 		}
 		app.mu.Lock()
-		app.State = fmt.Sprintf("Error: %v", err)
+		app.State = fmt.Sprintf("Error: %v\n%s", err, out)
 		app.mu.Unlock()
 		if LOG_MUTEX {
 			slog.Info("Unlock", "app", app.Name)
@@ -545,13 +545,13 @@ func (app *App) Cert() error {
 		email = "no-reply@gmail.com"
 	}
 	cmd := fmt.Sprintf(`certbot -n --agree-tos --email %s --nginx -d %s`, email, app.Domain)
-	_, err := execWrapped(cmd)
+	out, err := execWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
 			slog.Info("Lock", "app", app.Name)
 		}
 		app.mu.Lock()
-		app.State = fmt.Sprintf("Error: %v", err)
+		app.State = fmt.Sprintf("Error: %v\n%s", err, out)
 		app.mu.Unlock()
 		if LOG_MUTEX {
 			slog.Info("Unlock", "app", app.Name)
@@ -585,13 +585,13 @@ func (app *App) Stop() error {
 		return err
 	}
 
-	_, err := execWrapped(fmt.Sprintf(`docker stop %s`, app.Name))
+	out, err := execWrapped(fmt.Sprintf(`docker stop %s`, app.Name))
 	if err != nil {
 		if LOG_MUTEX {
 			slog.Info("Lock", "app", app.Name)
 		}
 		app.mu.Lock()
-		app.State = fmt.Sprintf("Error: %v", err)
+		app.State = fmt.Sprintf("Error: %v\n%s", err, out)
 		app.mu.Unlock()
 		if LOG_MUTEX {
 			slog.Info("Unlock", "app", app.Name)
@@ -636,13 +636,13 @@ func (app *App) Remove(removeRepo bool) error {
 	}
 
 	for _, cmd := range cmds {
-		_, err := execWrapped(cmd)
+		out, err := execWrapped(cmd)
 		if err != nil {
 			if LOG_MUTEX {
 				slog.Info("Lock", "app", app.Name)
 			}
 			app.mu.Lock()
-			app.State = fmt.Sprintf("Error: %v", err)
+			app.State = fmt.Sprintf("Error: %v\n%s", err, out)
 			app.mu.Unlock()
 			if LOG_MUTEX {
 				slog.Info("Unlock", "app", app.Name)
