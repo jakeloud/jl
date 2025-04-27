@@ -27,14 +27,34 @@ func CreateApp(params apiRequest) error {
 		return fmt.Errorf("failed to get config: %v", err)
 	}
 
+	port := 0
 	// Find an available port
-	takenPorts := make(map[int]bool)
+	takenPorts := make(map[int]int)
 	for _, app := range conf.Apps {
-		takenPorts[app.Port] = true
+		n, exists := takenPorts[app.Port]
+		if exists {
+			takenPorts[app.Port] = n + 1
+		} else {
+			takenPorts[app.Port] = 1
+		}
+		if app.Name == params.Name {
+			port = app.Port
+		}
 	}
-	port := 38000
-	for takenPorts[port] {
-		port++
+
+	if port != 0 {
+		n, _ := takenPorts[port]
+		if n != 1 {
+			port = 38000
+			for takenPorts[port] > 0 {
+				port++
+			}
+		}
+	} else {
+		port = 38000
+		for takenPorts[port] > 0 {
+			port++
+		}
 	}
 
 	// Create new App instance
