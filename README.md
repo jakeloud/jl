@@ -35,7 +35,10 @@ docker build --tag jlt --file=test.Dockerfile .
 ```
 
 ```
-docker run --name=jakeloud-test -p 80:80 -p 443:443 -p 666:666 -it jlt
+docker run --name=jakeloud-test -p 80:80 -p 443:443 -p 666:666 -d jlt
+```
+```
+docker exec -it jakeloud-test sh
 ```
 
 When inside container exec `jl` to initiate install
@@ -48,5 +51,6 @@ docker create --name jlc jl
 docker cp jlc:/app/jl jl
 docker rm jlc
 docker build --tag jlt --file=test.Dockerfile .
-docker run --name=jakeloud-test -p 80:80 -p 443:443 -p 666:666 -it jlt
+docker run --name=jakeloud-test -p 80:80 -p 443:443 -p 666:666 -d jlt
+docker exec -it jakeloud-test sh
 ```

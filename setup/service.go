@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 //go:embed jakeloud.service
@@ -41,7 +42,8 @@ func setupService(dry bool) error {
 	}
 
 	destPath := filepath.Join("/usr/local/bin", "jl")
-	shouldCopy := exePath == destPath
+	rel, _ := filepath.Rel(exePath, destPath)
+	shouldCopy := rel != "."
 
 	if shouldCopy {
 		fmt.Printf("Copying %s to %s\n", exePath, destPath)
@@ -74,8 +76,8 @@ func setupService(dry bool) error {
 	fmt.Printf("Starting services\n")
 	out, err := execWrapped(dry, "systemctl daemon-reload && systemctl enable jakeloud")
 	if err != nil {
-		if out == "System has not been booted with systemd as init system (PID 1). Can't operate.\nFailed to connect to bus: Host is down" {
-			return fmt.Errorf("Systemclt has not been booted. Please, reboot your machine to enable it.\n")
+		if strings.HasPrefix(out, "System has not been booted with systemd as init system (PID 1)") {
+			return fmt.Errorf("Systemctl has not been booted. Please, reboot your machine to enable it.\n")
 		}
 		return fmt.Errorf("failed to enable services: %v\n%s\n", err, out)
 	}

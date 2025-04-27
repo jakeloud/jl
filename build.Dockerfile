@@ -16,10 +16,5 @@ COPY --from=frontend-stage /app/server/dist /app/server/dist
 
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/jl
 
-FROM alpine:3.19.4
-
-WORKDIR /
-
+FROM scratch
 COPY --from=build-stage /app/jl /app/jl
-
-ENTRYPOINT ["/bin/sh", "-c", "cd /app && ./jl"]
