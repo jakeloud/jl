@@ -11,7 +11,7 @@ near future.
 It is a poor mans Heroku, that can run on lowest end
 machines.
 
-![ui screenshot](./docs/screenshot.jpg)
+![ui screenshot](./docs/screenshot.png)
 
 ## Build steps
 
