@@ -504,7 +504,7 @@ func (app *App) Start() error {
 	}
 
 	cmd := fmt.Sprintf(`docker run --name %s -d -p %d:80 %s %s`, app.Name, app.Port, dockerOptions, strings.ToLower(repoPath))
-	out, err = execWrapped(cmd)
+	out, err := execWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
 			slog.Info("Lock", "app", app.Name)
