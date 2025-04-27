@@ -133,9 +133,11 @@ export function AppCard({ app, refreshConfig }: AppCardProps) {
 
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="destructive" size="sm" disabled={isDeleting}>
-              <Trash2 className="mr-2 h-4 w-4" />
+            <Button variant="destructive" size="icon" disabled={isDeleting}>
+              <Trash2 className="h-4 w-4" />
+              <span className="sr-only">
               {isDeleting ? "Deleting..." : "Delete App"}
+              </span>
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
