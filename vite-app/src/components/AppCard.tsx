@@ -56,6 +56,8 @@ export function AppCard({ app, refreshConfig }: AppCardProps) {
     }
   }
 
+  const stateShort = app.state.startsWith('Error') ? '🔴 Error' : app.state
+
   return (
     <Card>
       <CardHeader>
@@ -73,10 +75,10 @@ export function AppCard({ app, refreshConfig }: AppCardProps) {
               </a>
             </CardDescription>
           </div>
-          <Badge variant={app.state === "running" ? "default" : "secondary"}>{app.state}</Badge>
+          <Badge variant={app.state === "running" ? "default" : "secondary"}>{stateShort}</Badge>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1">
         <div className="space-y-2 text-sm">
           <div>
             <span className="font-medium">Repository:</span> {app.repo}

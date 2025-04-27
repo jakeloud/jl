@@ -674,19 +674,23 @@ func (app *App) Advance(force bool) error {
 	}
 	switch app.State {
 	case "cloning":
-		return app.Build()
+		app.Build()
+		break
 	case "building":
-		return app.Proxy()
+		app.Proxy()
+		break
 	case "proxying":
-		return app.Start()
+		app.Start()
+		break
 	case "starting":
-		return app.Cert()
+		app.Cert()
+		break
 	default:
 		if err := app.Clone(); err != nil {
 			return err
 		}
 	}
-	return app.Advance(force)
+	return app.Advance(false)
 }
 
 func GetApp(name string) (App, error) {
