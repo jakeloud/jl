@@ -57,6 +57,14 @@ func CreateApp(params apiRequest) error {
 		}
 	}
 
+	dockerOptions := params.DockerOptions
+	if params.Additional != nil {
+		tmp, exists := params.Additional["dockerOptions"].(string)
+		if exists {
+			dockerOptions = tmp
+		}
+	}
+
 	// Create new App instance
 	app := entities.App{
 		Email:      params.Email,
@@ -64,7 +72,7 @@ func CreateApp(params apiRequest) error {
 		Repo:       params.Repo,
 		Name:       params.Name,
 		Port:       port,
-		Additional: map[string]interface{}{"dockerOptions": params.DockerOptions},
+		Additional: map[string]interface{}{"dockerOptions": dockerOptions},
 	}
 
 	// Save the app
