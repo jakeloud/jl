@@ -5,14 +5,19 @@ import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import { AppCard } from "./AppCard"
 import { CreateAppForm } from "./CreateAppForm"
-import type { App } from "../types"
+import { App } from "../types"
 
 interface AppsTabProps {
   apps?: App[]
+  setSelectedApp: (name: string) => void
   refreshConfig: () => void
 }
 
-export function AppsTab({ apps = [], refreshConfig }: AppsTabProps) {
+export function AppsTab({
+  apps = [],
+  setSelectedApp,
+  refreshConfig,
+}: AppsTabProps) {
   const [showCreateForm, setShowCreateForm] = useState(false)
 
   const filteredApps = apps.filter((app) => app.name !== "jakeloud")
@@ -37,7 +42,12 @@ export function AppsTab({ apps = [], refreshConfig }: AppsTabProps) {
       )}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filteredApps.map((app) => (
-          <AppCard key={app.name} app={app} refreshConfig={refreshConfig} />
+          <AppCard
+            key={app.name}
+            app={app}
+            onSelect={() => setSelectedApp(app.name)}
+            refreshConfig={refreshConfig}
+          />
         ))}
       </div>
 

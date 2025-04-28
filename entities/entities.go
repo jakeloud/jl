@@ -94,7 +94,7 @@ func GetConf() (Config, error) {
 	return conf, nil
 }
 
-func execWrapped(cmd string) (string, error) {
+func ExecWrapped(cmd string) (string, error) {
 	if dry {
 		slog.Info("Executing", "cmd", cmd)
 		return "", nil
@@ -113,7 +113,7 @@ func ClearCache() (string, error) {
 		return "", nil
 	}
 
-	res, err := execWrapped("docker system prune -af")
+	res, err := ExecWrapped("docker system prune -af")
 	if err != nil {
 		return err.Error(), err
 	}
@@ -128,7 +128,7 @@ func Start(server interface{}) error {
 
 	if !dry {
 		if _, err := os.Stat(SSH_KEY); os.IsNotExist(err) {
-			_, err := execWrapped(`ssh-keygen -q -t ed25519 -N '' -f ` + SSH_KEY)
+			_, err := ExecWrapped(`ssh-keygen -q -t ed25519 -N '' -f ` + SSH_KEY)
 			if err != nil {
 				return err
 			}
@@ -302,7 +302,7 @@ func (app *App) Clone() error {
 		return app.Save()
 	}
 
-	_, err = execWrapped(fmt.Sprintf(`rm -rf /etc/jakeloud/%s`, repoPath))
+	_, err = ExecWrapped(fmt.Sprintf(`rm -rf /etc/jakeloud/%s`, repoPath))
 	if err != nil {
 		if LOG_MUTEX {
 			slog.Info("Lock", "app", app.Name)
@@ -317,7 +317,7 @@ func (app *App) Clone() error {
 	}
 
 	cmd := fmt.Sprintf(`eval "$(ssh-agent -s)"; ssh-add %s; git clone --depth 1 %s /etc/jakeloud/%s; kill $SSH_AGENT_PID`, SSH_KEY, app.Repo, repoPath)
-	_, err = execWrapped(cmd)
+	_, err = ExecWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
 			slog.Info("Lock", "app", app.Name)
@@ -359,7 +359,7 @@ func (app *App) Build() error {
 	}
 
 	cmd := fmt.Sprintf(`docker build -t %s /etc/jakeloud/%s`, strings.ToLower(repoPath), repoPath)
-	out, err := execWrapped(cmd)
+	out, err := ExecWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
 			slog.Info("Lock", "app", app.Name)
@@ -430,7 +430,7 @@ server {
 		}
 	}
 
-	if out, err := execWrapped("nginx -t"); err != nil {
+	if out, err := ExecWrapped("nginx -t"); err != nil {
 		if LOG_MUTEX {
 			slog.Info("Lock", "app", app.Name)
 		}
@@ -454,7 +454,7 @@ server {
 		}
 	}
 
-	if out, err := execWrapped("service nginx restart"); err != nil {
+	if out, err := ExecWrapped("service nginx restart"); err != nil {
 		if LOG_MUTEX {
 			slog.Info("Lock", "app", app.Name)
 		}
@@ -494,7 +494,7 @@ func (app *App) Start() error {
 		return err
 	}
 
-	_, err = execWrapped(fmt.Sprintf(`if [ -z "$(docker ps -q -f name=%s)" ]; then echo "starting first time"; else docker stop %s && docker rm %s; fi`, app.Name, app.Name, app.Name))
+	_, err = ExecWrapped(fmt.Sprintf(`if [ -z "$(docker ps -q -f name=%s)" ]; then echo "starting first time"; else docker stop %s && docker rm %s; fi`, app.Name, app.Name, app.Name))
 	if err != nil {
 		return err
 	}
@@ -505,7 +505,7 @@ func (app *App) Start() error {
 	}
 
 	cmd := fmt.Sprintf(`docker run --name %s -d -p %d:80 %s %s`, app.Name, app.Port, dockerOptions, strings.ToLower(repoPath))
-	out, err := execWrapped(cmd)
+	out, err := ExecWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
 			slog.Info("Lock", "app", app.Name)
@@ -546,7 +546,7 @@ func (app *App) Cert() error {
 		email = "no-reply@gmail.com"
 	}
 	cmd := fmt.Sprintf(`certbot -n --agree-tos --email %s --nginx -d %s`, email, app.Domain)
-	out, err := execWrapped(cmd)
+	out, err := ExecWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
 			slog.Info("Lock", "app", app.Name)
@@ -586,7 +586,7 @@ func (app *App) Stop() error {
 		return err
 	}
 
-	out, err := execWrapped(fmt.Sprintf(`docker stop %s`, app.Name))
+	out, err := ExecWrapped(fmt.Sprintf(`docker stop %s`, app.Name))
 	if err != nil {
 		if LOG_MUTEX {
 			slog.Info("Lock", "app", app.Name)
@@ -637,7 +637,7 @@ func (app *App) Remove(removeRepo bool) error {
 	}
 
 	for _, cmd := range cmds {
-		out, err := execWrapped(cmd)
+		out, err := ExecWrapped(cmd)
 		if err != nil {
 			if LOG_MUTEX {
 				slog.Info("Lock", "app", app.Name)

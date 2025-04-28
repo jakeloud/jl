@@ -4,6 +4,7 @@ export interface App {
   repo: string
   email: string
   state: string
+  port?: string
   dockerOptions?: string
   additional?: {
     dockerOptions?: string
@@ -11,6 +12,8 @@ export interface App {
     chatId?: string
     botToken?: string
     sshKey?: string
+    ps?: string
+    logs?: string
   }
 }
 

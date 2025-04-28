@@ -6,17 +6,19 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { toast } from 'sonner'
 import { Toaster } from "@/components/ui/sonner"
-import { LoginForm } from "./components/LoginForm"
-import { RegisterForm } from "./components/RegisterForm"
-import { AppsTab } from "./components/AppsTab"
-import { SettingsTab } from "./components/SettingsTab"
-import { useAuth } from "./hooks/useAuth"
-import { useApi } from "./hooks/useApi"
-import { AppConfig } from "./types"
+import { LoginForm } from "@/components/LoginForm"
+import { RegisterForm } from "@/components/RegisterForm"
+import { AppsTab } from "@/components/AppsTab"
+import { AppView } from "@/components/AppView"
+import { SettingsTab } from "@/components/SettingsTab"
+import { useAuth } from "@/hooks/useAuth"
+import { useApi } from "@/hooks/useApi"
+import { AppConfig } from "@/types"
 
 function App() {
   const [config, setConfig] = useState<AppConfig | null>(null)
   const [activeTab, setActiveTab] = useState<string>("apps")
+  const [selectedApp, setSelectedApp] = useState('')
   const { isAuthenticated, logout } = useAuth()
   const { api } = useApi()
 
@@ -56,6 +58,17 @@ function App() {
     )
   }
 
+  const app = config?.apps?.find(a => a.name == selectedApp)
+  if (app != undefined) {
+    return (
+      <AppView
+        app={app}
+        refreshConfig={getConfig}
+        back={() => setSelectedApp('')}
+      />
+    )
+  }
+
   return (
     <div className="max-w-5xl container mx-auto p-2">
       <header className="mb-6">
@@ -82,7 +95,13 @@ function App() {
       </header>
 
       <main>
-        {activeTab === "apps" && <AppsTab apps={config.apps} refreshConfig={getConfig} />}
+        {activeTab === "apps" && (
+          <AppsTab
+            apps={config.apps}
+            refreshConfig={getConfig}
+            setSelectedApp={setSelectedApp}
+          />
+        )}
         {activeTab === "settings" && <SettingsTab apps={config.apps} refreshConfig={getConfig} />}
       </main>
       <Toaster />

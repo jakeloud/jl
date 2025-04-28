@@ -6,44 +6,19 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Globe, ExternalLink, RefreshCw, Trash2 } from "lucide-react"
+import { Ellipsis, Globe, ExternalLink, RefreshCw } from "lucide-react"
 import { App } from "@/types"
 import { useApi } from "@/hooks/useApi"
 import { toast } from "sonner"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
-
-
-function getDomainFavicon(domain: string): Promise<string> {
-  return new Promise((resolve) => {
-    setTimeout(() => resolve(''), 60000)
-
-    const url = `https://${domain}/favicon.ico`
-
-    const image = document.createElement('img')
-    image.src = url
-    image.onload = () => {
-      resolve(url)
-    }
-  })
-}
+import { getDomainFavicon } from "@/lib/favicon"
 
 interface AppCardProps {
   app: App
+  onSelect: () => void
   refreshConfig: () => void
 }
-export function AppCard({ app, refreshConfig }: AppCardProps) {
+export function AppCard({ app, onSelect, refreshConfig }: AppCardProps) {
   const [isRebooting, setIsRebooting] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
   const [favicon, setFavicon] = useState("")
   const [faviconLoading, setFaviconLoading] = useState(true)
   const { api } = useApi()
@@ -58,19 +33,6 @@ export function AppCard({ app, refreshConfig }: AppCardProps) {
       toast.error("Failed to reboot app")
     } finally {
       setIsRebooting(false)
-    }
-  }
-
-  const handleDelete = async () => {
-    setIsDeleting(true)
-    try {
-      await api("deleteAppOp", app)
-      toast.success("App deletion initiated")
-      refreshConfig()
-    } catch (error) {
-      toast.error("Failed to delete app")
-    } finally {
-      setIsDeleting(false)
     }
   }
 
@@ -130,30 +92,9 @@ export function AppCard({ app, refreshConfig }: AppCardProps) {
           <RefreshCw className="mr-2 h-4 w-4" />
           {isRebooting ? "Rebooting..." : "Full Reboot"}
         </Button>
-
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="destructive" size="icon" disabled={isDeleting}>
-              <Trash2 className="h-4 w-4" />
-              <span className="sr-only">
-              {isDeleting ? "Deleting..." : "Delete App"}
-              </span>
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This action cannot be undone. This will permanently delete the app "{app.name}" and remove all
-                associated data.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <Button size="icon" onClick={onSelect} className="size-8">
+          <Ellipsis className="h-4 w-4" />
+        </Button>
       </CardFooter>
     </Card>
   )

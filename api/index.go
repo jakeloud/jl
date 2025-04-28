@@ -46,6 +46,15 @@ func API(w http.ResponseWriter, r *http.Request) {
 				w.Write(data)
 			}
 		}
+	case "getAppOp":
+		result, err := GetApp(body)
+		if err == nil && result != nil {
+			data, err := json.Marshal(result)
+			if err == nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.Write(data)
+			}
+		}
 	case "createAppOp":
 		err = CreateApp(body)
 	case "deleteAppOp":
