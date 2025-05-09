@@ -8,11 +8,13 @@ import { Button } from "@/components/ui/button"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { useApi } from "../hooks/useApi"
+import { useApi } from "@/hooks/useApi"
 import { toast } from "sonner"
 
 const formSchema = z.object({
-  name: z.string().min(1, { message: "App name is required" }),
+  name: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]+$/, {
+    message: 'Must start with an alphanumeric character and contain only alphanumeric characters, underscores, dots, or hyphens',
+  }),
   domain: z.string().min(3, { message: "Domain must be at least 3 characters" }),
   repo: z.string().min(1, { message: "Repository URL is required" }),
   dockerOptions: z.string().optional(),
