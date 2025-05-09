@@ -13,6 +13,26 @@ machines.
 
 ![ui screenshot](./docs/screenshot.png)
 
+## Installation
+
+Debian 11 is recommended. Other debian-based distros should work as well.
+
+[release page](https://github.com/jakeloud/jl/releases/)
+
+Execute this on the server:
+```
+sudo su
+wget https://github.com/jakeloud/jl/releases/download/v1.0.6/jl
+chmod +x jl
+./jl
+```
+
+If you are updating jakeloud, first you have to stop it with:
+```
+systemctl stop jakeloud
+```
+
+
 ## Build steps
 
 this is what you do if you want "build from source"

@@ -93,6 +93,12 @@ func Start(d bool) {
 		fmt.Fprint(os.Stderr, err)
 		os.Exit(1)
 	}
+  cmd := "ssh-keyscan -H github.com >> ~/.ssh/known_hosts"
+  _, err = execWrapped(dry, cmd)
+  if err != nil {
+    fmt.Fprint(os.Stderr, err)
+    os.Exit(1)
+  }
 
 	if _, err = p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Alas, there's been an error: %v", err)

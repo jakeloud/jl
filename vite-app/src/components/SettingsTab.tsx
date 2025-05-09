@@ -85,8 +85,8 @@ interface SSHKeyProps {
   sshKey: string
 }
 function SSHKey({sshKey}: SSHKeyProps) {
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
+  const copySshKeyToClipboard = () => {
+    navigator.clipboard.writeText(sshKey.trim())
     toast.success("SSH key copied to clipboard")
   }
 
@@ -106,13 +106,29 @@ function SSHKey({sshKey}: SSHKeyProps) {
                 variant="outline"
                 size="sm"
                 className="absolute top-2 right-2"
-                onClick={() => copyToClipboard(sshKey)}
+                onClick={copySshKeyToClipboard}
               >
                 <Copy className="h-4 w-4" />
               </Button>
             )}
           </div>
         </div>
+        <p className="flex">
+          Go to
+            <a
+              href={`https://github.com/settings/keys`}
+              className="ml-1 underline flex items-center mr-2"
+              target="_blank"
+            >
+              github.com/settings/keys
+              <ExternalLink
+                className="mt-1 ml-0.5 h-3 w-3"
+              />
+            </a>
+          and create
+            <span className="ml-1 tracking-tight font-semibold">New SSH key</span>
+          .
+        </p>
       </CardContent>
     </Card>
   )
@@ -192,7 +208,9 @@ function TelegramIntegration({jakeloudApp, refreshConfig}: TelegramIntegrationPr
                   className="mt-1 ml-0.5 h-3 w-3"
                 />
               </a>
-              and replace &lt;token&gt; with your Bot Token.
+              and replace 
+              <span className="mx-1 tracking-tight font-semibold">&lt;token&gt;</span>
+              with your Bot Token.
             </p>
             <FormField
               control={form.control}
