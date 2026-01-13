@@ -3,7 +3,7 @@ FROM oven/bun:1.2.15-alpine AS frontend-stage
 
 WORKDIR /app
 COPY . .
-RUN cd vite-app && npm i && npm run build
+RUN cd vite-app && bun i && bun run build
 
 FROM golang:1.23.3 AS build-stage
 
