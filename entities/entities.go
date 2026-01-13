@@ -48,13 +48,13 @@ type App struct {
 type Config struct {
 	Apps  []App  `json:"apps"`
 	Users []User `json:"users"`
-        DBs []DB `json:"dbs"`
+	DBs   []DB   `json:"dbs"`
 }
 
 type DB struct {
-	Name       string                 `json:"name"`
-        Path string `json:"path"`
-	mu         sync.Mutex
+	Name string `json:"name"`
+	Path string `json:"path"`
+	mu   sync.Mutex
 }
 
 type User struct {
@@ -92,7 +92,7 @@ func GetConf() (Config, error) {
 		conf = Config{
 			Apps:  []App{{Name: JAKELOUD, Port: 666}},
 			Users: []User{},
-			DBs: []DB{},
+			DBs:   []DB{},
 		}
 		return conf, nil
 	}

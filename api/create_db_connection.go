@@ -17,8 +17,8 @@ func CreateDBConnection(params apiRequest) error {
 
 	// Create new DB instance
 	db := entities.DB{
-                Name:       params.Name,
-		Path:       params.Path,
+		Name: params.Name,
+		Path: params.Path,
 	}
 
 	// Save the DB

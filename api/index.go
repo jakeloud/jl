@@ -17,7 +17,7 @@ type apiRequest struct {
 	DockerOptions string                 `json:"dockerOptions"`
 	Additional    map[string]interface{} `json:"additional"`
 	Path          string                 `json:"path"`
-        Table   string `json:"table"`
+	Table         string                 `json:"table"`
 }
 
 func API(w http.ResponseWriter, r *http.Request) {
@@ -59,9 +59,9 @@ func API(w http.ResponseWriter, r *http.Request) {
 		}
 	case "queryDBOp":
 		result, err := QueryDBOp(body)
-                if err != nil {
-                        slog.Info("queryDBOp", err)
-                }
+		if err != nil {
+			slog.Info("queryDBOp", err)
+		}
 		if err == nil {
 			data, err := json.Marshal(result)
 			if err == nil {
