@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { ArrowLeft, Database, RefreshCw, Trash2 } from "lucide-react"
 import { useApi } from "@/hooks/useApi"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,16 +21,37 @@ import {
 } from "@/components/ui/alert-dialog"
 import { toast } from "sonner"
 
-
 interface DBViewProps {
   db: DB
   back: () => void
   refreshConfig: () => void
 }
-export function DBView({ db: initialDB, back, refreshConfig }: DBViewProps) {
-  const [db, setDB] = useState(initialDB)
+export function DBView({ db, back, refreshConfig }: DBViewProps) {
   const [isDeleting, setIsDeleting] = useState(false)
+  const [selectedTable, setSelectedTable] = useState('')
+  const [tables, setTables] = useState([])
+  const [rows, setRows] = useState([])
+  const [total, setTotal] = useState(0)
   const { api } = useApi()
+
+  const queryDB = async () => {
+    try {
+      const response = await api(
+        "queryDBOp",
+        {name: db.name, table: selectedTable},
+      )
+      const data = await response.json()
+      setTables(data.tables || [])
+      setRows(data.rows || [])
+      setTotal(data.total || 0)
+    } catch (error) {
+      toast.error("Failed to query database")
+    }
+  }
+
+  useEffect(() => {
+    queryDB()
+  }, [])
 
   const handleDelete = async () => {
     setIsDeleting(true)
@@ -66,7 +88,7 @@ export function DBView({ db: initialDB, back, refreshConfig }: DBViewProps) {
             </CardDescription>
           </div>
           <div className="flex flex-col gap-2">
-            <Button size="sm" onClick={() => {}}>
+            <Button size="sm" onClick={queryDB}>
               <RefreshCw/>
               Update status
             </Button>
@@ -75,13 +97,29 @@ export function DBView({ db: initialDB, back, refreshConfig }: DBViewProps) {
         </CardHeader>
       </Card>
 
+        
+    {tables.length > 0 ? (
+            <Tabs value={selectedTable} onValueChange={setSelectedTable}>
+              <TabsList>
+                {tables.map((table) => (
+                        <TabsTrigger key={table} value={table}>{table}</TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+    ) : null}
+
       <Card className="m-6">
         <CardHeader>
           <CardTitle>
-            Status / Logs
+            Total: {total}
           </CardTitle>
         </CardHeader>
         <CardContent>
+        {rows.map((row, index) => (
+                        <div key={index}>
+                                {JSON.stringify(row)}
+                        </div>
+        ))}
         </CardContent>
       </Card>
 

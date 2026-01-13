@@ -1,23 +1,16 @@
 "use client"
 
-import { useState } from "react"
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Ellipsis, Database } from "lucide-react"
 import { DB } from "@/types"
-import { useApi } from "@/hooks/useApi"
-import { toast } from "sonner"
 
 interface DBCardProps {
   db: DB
   onSelect: () => void
-  refreshConfig: () => void
 }
-export function DBCard({ db, onSelect, refreshConfig }: AppCardProps) {
-  const { api } = useApi()
-
-
+export function DBCard({ db, onSelect }: DBCardProps) {
   return (
     <Card>
       <CardHeader>

@@ -17,6 +17,7 @@ type apiRequest struct {
 	DockerOptions string                 `json:"dockerOptions"`
 	Additional    map[string]interface{} `json:"additional"`
 	Path          string                 `json:"path"`
+        Table   string `json:"table"`
 }
 
 func API(w http.ResponseWriter, r *http.Request) {
@@ -50,6 +51,15 @@ func API(w http.ResponseWriter, r *http.Request) {
 	case "getAppOp":
 		result, err := GetApp(body)
 		if err == nil && result != nil {
+			data, err := json.Marshal(result)
+			if err == nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.Write(data)
+			}
+		}
+	case "queryDBOp":
+		result, err := QueryDBOp(body)
+		if err == nil {
 			data, err := json.Marshal(result)
 			if err == nil {
 				w.Header().Set("Content-Type", "application/json")

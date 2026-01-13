@@ -42,7 +42,6 @@ export function DBsTab({ dbs = [], refreshConfig, setSelectedDB }: DBsTabProps) 
             key={db.name}
             db={db}
             onSelect={() => setSelectedDB(db.name)}
-            refreshConfig={refreshConfig}
           />
         ))}
       </div>
