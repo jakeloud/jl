@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:20.12.0-alpine3.19 AS frontend-stage
+FROM oven/bun:1.2.15-alpine AS frontend-stage
 
 WORKDIR /app
 COPY . .

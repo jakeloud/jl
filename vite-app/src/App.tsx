@@ -96,12 +96,7 @@ function App() {
               <TabsList>
                 <TabsTrigger value="apps">Apps</TabsTrigger>
                 <TabsTrigger value="settings">Settings</TabsTrigger>
-                <TabsTrigger value="dbs" className="relative">
-                        DBs
-                        <span className="absolute text-accent-foreground right-[-.1rem] top-[-.1rem] text-[.5rem] font-black">
-                                new
-                        </span>
-                </TabsTrigger>
+                <TabsTrigger value="dbs">DBs</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
