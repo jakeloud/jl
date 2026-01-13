@@ -59,6 +59,9 @@ func API(w http.ResponseWriter, r *http.Request) {
 		}
 	case "queryDBOp":
 		result, err := QueryDBOp(body)
+                if err != nil {
+                        slog.Info("queryDBOp", err)
+                }
 		if err == nil {
 			data, err := json.Marshal(result)
 			if err == nil {

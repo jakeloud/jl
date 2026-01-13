@@ -19,6 +19,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { toast } from "sonner"
 
 interface DBViewProps {
@@ -43,7 +52,7 @@ export function DBView({ db, back, refreshConfig }: DBViewProps) {
       const data = await response.json()
       setTables(data.tables || [])
       setRows(data.rows || [])
-      setTotal(data.total || 0)
+      setTotal(data.count || 0)
     } catch (error) {
       toast.error("Failed to query database")
     }
@@ -51,7 +60,7 @@ export function DBView({ db, back, refreshConfig }: DBViewProps) {
 
   useEffect(() => {
     queryDB()
-  }, [])
+  }, [selectedTable])
 
   const handleDelete = async () => {
     setIsDeleting(true)
@@ -99,7 +108,7 @@ export function DBView({ db, back, refreshConfig }: DBViewProps) {
 
         
     {tables.length > 0 ? (
-            <Tabs value={selectedTable} onValueChange={setSelectedTable}>
+            <Tabs className="m-6" value={selectedTable} onValueChange={setSelectedTable}>
               <TabsList>
                 {tables.map((table) => (
                         <TabsTrigger key={table} value={table}>{table}</TabsTrigger>
@@ -109,17 +118,30 @@ export function DBView({ db, back, refreshConfig }: DBViewProps) {
     ) : null}
 
       <Card className="m-6">
-        <CardHeader>
-          <CardTitle>
-            Total: {total}
-          </CardTitle>
-        </CardHeader>
         <CardContent>
-        {rows.map((row, index) => (
-                        <div key={index}>
-                                {JSON.stringify(row)}
-                        </div>
-        ))}
+                <Table>
+                        <TableCaption>Total: {total}</TableCaption>
+                        {rows.length > 0 ? (
+                                <TableHeader>
+                                        <TableRow>
+                                                {Object.keys(rows[0]).map((col) => (
+                                                        <TableHead key={col}>{col}</TableHead>
+                                                ))}
+                                        </TableRow>
+                                </TableHeader>
+                        ) : null}
+                        <TableBody>
+                                {rows.map((row, index) => (
+                                                <TableRow key={index}>
+                                                        {Object.keys(row).map((col) => (
+                                                                <TableCell key={`${index}-${col}`}>
+                                                                        {JSON.stringify(row[col])}
+                                                                </TableCell>
+                                                        ))}
+                                                </TableRow>
+                                ))}
+                        </TableBody>
+                </Table>
         </CardContent>
       </Card>
 

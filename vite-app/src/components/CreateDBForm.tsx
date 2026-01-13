@@ -74,7 +74,7 @@ export function CreateDBForm({ onSuccess, onCancel }: CreateDBFormProps) {
                 <FormControl>
                   <Input placeholder="/app/db/my-database.sqlite" {...field} />
                 </FormControl>
-                <FormDescription>Path to sqlite database file. Example: "/app/db/my-database.sqlite"</FormDescription>
+                <FormDescription>Path to sqlite database file. Example: "/app/db/my-database.sqlite?_pragma=busy_timeout(60000)"</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
