@@ -11,7 +11,7 @@ near future*.
 It is a poor mans Heroku, that can run on lowest end
 machines.
 
-*EDIT: why would you want unsandboxed environment? If you know how to implement docker alongside shell (no virtualization), message me or submit PR, I will merge it ASAP.
+*EDIT: why would you want unsandboxed environment? If you know how to implement docker alongside shell (no virtualization), message me or submit PR, I will merge it ASAP. I will buy you Macallan 12, if you merge in this feature.
 
 ![ui screenshot](./docs/screenshot.png)
 
