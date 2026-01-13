@@ -16,6 +16,7 @@ type apiRequest struct {
 	Repo          string                 `json:"repo"`
 	DockerOptions string                 `json:"dockerOptions"`
 	Additional    map[string]interface{} `json:"additional"`
+	Path          string                 `json:"path"`
 }
 
 func API(w http.ResponseWriter, r *http.Request) {
@@ -57,8 +58,12 @@ func API(w http.ResponseWriter, r *http.Request) {
 		}
 	case "createAppOp":
 		err = CreateApp(body)
+	case "createDBConnectionOp":
+		err = CreateDBConnection(body)
 	case "deleteAppOp":
 		err = DeleteApp(body)
+	case "deleteDBConnectionOp":
+		err = DeleteDBConnection(body)
 	case "clearCacheOp":
 		err = ClearCacheOp(body)
 	default:

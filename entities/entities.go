@@ -48,6 +48,13 @@ type App struct {
 type Config struct {
 	Apps  []App  `json:"apps"`
 	Users []User `json:"users"`
+        DBs []DB `json:"dbs"`
+}
+
+type DB struct {
+	Name       string                 `json:"name"`
+        Path string `json:"path"`
+	mu         sync.Mutex
 }
 
 type User struct {
@@ -85,6 +92,7 @@ func GetConf() (Config, error) {
 		conf = Config{
 			Apps:  []App{{Name: JAKELOUD, Port: 666}},
 			Users: []User{},
+			DBs: []DB{},
 		}
 		return conf, nil
 	}
@@ -755,4 +763,73 @@ func SetUser(email, password string) error {
 	}
 
 	return SetConf(conf)
+}
+
+func (db *DB) Save() error {
+	if LOG_MUTEX {
+		slog.Info("Lock", "db", db.Name)
+	}
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	if LOG_MUTEX {
+		slog.Info("Unlock", "db", db.Name)
+	}
+
+	conf, err := GetConf()
+	if err != nil {
+		return err
+	}
+
+	dbIndex := -1
+	for i, d := range conf.DBs {
+		if d.Name == db.Name {
+			dbIndex = i
+			break
+		}
+	}
+
+	if dbIndex == -1 {
+		conf.DBs = append(conf.DBs, *db)
+	} else {
+		conf.DBs[dbIndex] = *db
+	}
+
+	return SetConf(conf)
+}
+
+func (db *DB) Remove() error {
+	if LOG_MUTEX {
+		slog.Info("Lock", "db", db.Name)
+	}
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	if LOG_MUTEX {
+		slog.Info("Unlock", "db", db.Name)
+	}
+
+	conf, err := GetConf()
+	if err != nil {
+		return err
+	}
+	newDBs := make([]DB, 0)
+	for _, d := range conf.DBs {
+		if d.Name != db.Name {
+			newDBs = append(newDBs, d)
+		}
+	}
+	conf.DBs = newDBs
+	return SetConf(conf)
+}
+
+func GetDB(name string) (DB, error) {
+	conf, err := GetConf()
+	if err != nil {
+		return DB{}, err
+	}
+	for _, db := range conf.DBs {
+		if db.Name == name {
+			return db, nil
+		}
+	}
+	return DB{}, errors.New("db not found")
 }

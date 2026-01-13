@@ -18,12 +18,14 @@ export interface App {
 }
 
 export interface DB {
+        name: string
         path: string
 }
 
 export interface AppConfig {
   message?: "login" | "register"
   apps?: App[]
+  dbs?: DB[]
 }
 
 export interface LoginData {

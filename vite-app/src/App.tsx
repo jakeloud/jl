@@ -10,6 +10,7 @@ import { LoginForm } from "@/components/LoginForm"
 import { RegisterForm } from "@/components/RegisterForm"
 import { AppsTab } from "@/components/AppsTab"
 import { AppView } from "@/components/AppView"
+import { DBView } from "@/components/DBView"
 import { SettingsTab } from "@/components/SettingsTab"
 import { DBsTab } from "@/components/DBsTab"
 import { useAuth } from "@/hooks/useAuth"
@@ -20,6 +21,7 @@ function App() {
   const [config, setConfig] = useState<AppConfig | null>(null)
   const [activeTab, setActiveTab] = useState<string>("apps")
   const [selectedApp, setSelectedApp] = useState('')
+  const [selectedDB, setSelectedDB] = useState('')
   const { isAuthenticated, logout } = useAuth()
   const { api } = useApi()
 
@@ -70,6 +72,17 @@ function App() {
     )
   }
 
+  const db = (config?.dbs || []).find(d => d.name == selectedDB)
+  if (db != undefined) {
+    return (
+      <DBView
+        db={db}
+        refreshConfig={getConfig}
+        back={() => setSelectedDB('')}
+      />
+    )
+  }
+
   return (
     <div className="max-w-5xl container mx-auto p-2">
       <header className="mb-6">
@@ -110,7 +123,7 @@ function App() {
           />
         )}
         {activeTab === "settings" && <SettingsTab apps={config.apps} refreshConfig={getConfig} />}
-        {activeTab === "dbs" && <DBsTab dbs={config.dbs} refreshConfig={getConfig} />}
+        {activeTab === "dbs" && <DBsTab dbs={config.dbs || []} refreshConfig={getConfig} setSelectedDB={setSelectedDB} />}
       </main>
       <Toaster />
     </div>
