@@ -5,7 +5,7 @@ WORKDIR /app
 COPY . .
 RUN cd vite-app && bun i && bun run build
 
-FROM golang:1.23.3 AS build-stage
+FROM golang:1.25.1 AS build-stage
 
 WORKDIR /app
 
