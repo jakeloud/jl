@@ -17,6 +17,10 @@ export interface App {
   }
 }
 
+export interface DB {
+        path: string
+}
+
 export interface AppConfig {
   message?: "login" | "register"
   apps?: App[]

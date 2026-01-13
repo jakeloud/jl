@@ -11,6 +11,7 @@ import { RegisterForm } from "@/components/RegisterForm"
 import { AppsTab } from "@/components/AppsTab"
 import { AppView } from "@/components/AppView"
 import { SettingsTab } from "@/components/SettingsTab"
+import { DBsTab } from "@/components/DBsTab"
 import { useAuth } from "@/hooks/useAuth"
 import { useApi } from "@/hooks/useApi"
 import { AppConfig } from "@/types"
@@ -82,6 +83,12 @@ function App() {
               <TabsList>
                 <TabsTrigger value="apps">Apps</TabsTrigger>
                 <TabsTrigger value="settings">Settings</TabsTrigger>
+                <TabsTrigger value="dbs" className="relative">
+                        DBs
+                        <span className="absolute text-accent-foreground right-[-.1rem] top-[-.1rem] text-[.5rem] font-black">
+                                new
+                        </span>
+                </TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -103,6 +110,7 @@ function App() {
           />
         )}
         {activeTab === "settings" && <SettingsTab apps={config.apps} refreshConfig={getConfig} />}
+        {activeTab === "dbs" && <DBsTab dbs={config.dbs} refreshConfig={getConfig} />}
       </main>
       <Toaster />
     </div>
