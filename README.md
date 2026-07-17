@@ -1,17 +1,12 @@
 # JakeLoud (project jl)
 
-Jakeloud is like a box of chocolates. You never know
-what you're gonna get.
-
-In essense it is a ci/cd tool with web ui.
-Intended use is with docker, however arbitrary build,
-run and clone commands should be supported in the
-near future*.
+Jakeloud is a ci/cd tool with web ui.
+Intended use is with docker/podman,
+however arbitrary run commands should be supported
+in the near future*.
 
 It is a poor mans Heroku, that can run on lowest end
 machines.
-
-*EDIT: why would you want unsandboxed environment? If you know how to implement docker alongside shell (no virtualization), message me or submit PR, I will merge it ASAP. I will buy you Macallan 12, if you merge in this feature.
 
 ![ui screenshot](./docs/screenshot.png)
 
