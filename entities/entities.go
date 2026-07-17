@@ -12,6 +12,9 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -246,13 +249,105 @@ func (project *Project) Save() error {
 	return SetConf(conf)
 }
 
-func (project *Project) ShortRepoPath() (string, error) {
-	parts := strings.Split(project.Repo, ":")
-	if len(parts) < 2 {
-		return "", errors.New("Repo format should be git@github.com:<user>/<repo>.git")
+func (project *Project) ProjectDir() string {
+	return filepath.Join(PROJECTS_ROOT, project.Name)
+}
+
+func (project *Project) DockerImage() string {
+	return strings.ToLower(project.Name)
+}
+
+func releaseNumber(name string) (int, bool) {
+	if !strings.HasPrefix(name, "r") {
+		return 0, false
 	}
-	path := strings.Split(parts[1], ".git")[0]
-	return path, nil
+
+	n, err := strconv.Atoi(strings.TrimPrefix(name, "r"))
+	if err != nil || n < 1 {
+		return 0, false
+	}
+	return n, true
+}
+
+func (project *Project) ReleaseDirs() (map[int]string, error) {
+	releases := make(map[int]string)
+	entries, err := os.ReadDir(project.ProjectDir())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return releases, nil
+		}
+		return releases, err
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		n, ok := releaseNumber(entry.Name())
+		if !ok {
+			continue
+		}
+		releases[n] = filepath.Join(project.ProjectDir(), entry.Name())
+	}
+	return releases, nil
+}
+
+func (project *Project) CurrentReleaseDir() (string, error) {
+	releases, err := project.ReleaseDirs()
+	if err != nil {
+		return "", err
+	}
+
+	current := 0
+	for n := range releases {
+		if n > current {
+			current = n
+		}
+	}
+	if current == 0 {
+		return "", errors.New("release not found")
+	}
+	return releases[current], nil
+}
+
+func (project *Project) NewRelease() (string, error) {
+	if err := os.MkdirAll(project.ProjectDir(), 0755); err != nil {
+		return "", err
+	}
+
+	releases, err := project.ReleaseDirs()
+	if err != nil {
+		return "", err
+	}
+
+	current := 0
+	for n := range releases {
+		if n > current {
+			current = n
+		}
+	}
+
+	next := current + 1
+	releaseDir := filepath.Join(project.ProjectDir(), fmt.Sprintf("r%d", next))
+	if err := os.MkdirAll(releaseDir, 0755); err != nil {
+		return "", err
+	}
+
+	keep := map[int]bool{next: true, next - 1: true}
+	oldReleaseNumbers := make([]int, 0)
+	for n := range releases {
+		if !keep[n] {
+			oldReleaseNumbers = append(oldReleaseNumbers, n)
+		}
+	}
+	sort.Ints(oldReleaseNumbers)
+	for _, n := range oldReleaseNumbers {
+		if err := os.RemoveAll(releases[n]); err != nil {
+			return "", err
+		}
+	}
+
+	return releaseDir, nil
 }
 
 func (project *Project) LoadState() error {
@@ -290,7 +385,7 @@ func (project *Project) Clone() error {
 		return err
 	}
 
-	repoPath, err := project.ShortRepoPath()
+	releaseDir, err := project.NewRelease()
 	if err != nil {
 		if LOG_MUTEX {
 			slog.Info("Lock", "project", project.Name)
@@ -304,21 +399,7 @@ func (project *Project) Clone() error {
 		return project.Save()
 	}
 
-	_, err = ExecWrapped(fmt.Sprintf(`rm -rf %s/%s`, PROJECTS_ROOT, repoPath))
-	if err != nil {
-		if LOG_MUTEX {
-			slog.Info("Lock", "project", project.Name)
-		}
-		project.mu.Lock()
-		project.State = fmt.Sprintf("Error: %v", err)
-		project.mu.Unlock()
-		if LOG_MUTEX {
-			slog.Info("Unlock", "project", project.Name)
-		}
-		return project.Save()
-	}
-
-	cmd := fmt.Sprintf(`eval "$(ssh-agent -s)"; ssh-add %s; git clone --depth 1 %s %s/%s; kill $SSH_AGENT_PID`, SSH_KEY, project.Repo, PROJECTS_ROOT, repoPath)
+	cmd := fmt.Sprintf(`eval "$(ssh-agent -s)"; ssh-add %s; git clone --depth 1 %s %s; kill $SSH_AGENT_PID`, SSH_KEY, project.Repo, releaseDir)
 	_, err = ExecWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
@@ -355,12 +436,12 @@ func (project *Project) Build() error {
 		return err
 	}
 
-	repoPath, err := project.ShortRepoPath()
+	releaseDir, err := project.CurrentReleaseDir()
 	if err != nil {
 		return err
 	}
 
-	cmd := fmt.Sprintf(`docker build -t %s %s/%s`, strings.ToLower(repoPath), PROJECTS_ROOT, repoPath)
+	cmd := fmt.Sprintf(`docker build -t %s %s`, project.DockerImage(), releaseDir)
 	out, err := ExecWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
@@ -492,11 +573,6 @@ func (project *Project) Start() error {
 		return err
 	}
 
-	repoPath, err := project.ShortRepoPath()
-	if err != nil {
-		return err
-	}
-
 	_, err = ExecWrapped(fmt.Sprintf(`if [ -z "$(docker ps -q -f name=%s)" ]; then echo "starting first time"; else docker stop %s && docker rm %s; fi`, project.Name, project.Name, project.Name))
 	if err != nil {
 		return err
@@ -507,7 +583,7 @@ func (project *Project) Start() error {
 		dockerOptions = opts.(string)
 	}
 
-	cmd := fmt.Sprintf(`docker run --name %s -d -p %d:80 %s %s`, project.Name, project.Port, dockerOptions, strings.ToLower(repoPath))
+	cmd := fmt.Sprintf(`docker run --name %s -d -p %d:80 %s %s`, project.Name, project.Port, dockerOptions, project.DockerImage())
 	out, err := ExecWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
@@ -605,7 +681,7 @@ func (project *Project) Stop() error {
 	return nil
 }
 
-func (project *Project) Remove(removeRepo bool) error {
+func (project *Project) Remove() error {
 	if err := project.LoadState(); err != nil {
 		return err
 	}
@@ -625,18 +701,11 @@ func (project *Project) Remove(removeRepo bool) error {
 		return err
 	}
 
-	repoPath, err := project.ShortRepoPath()
-	if err != nil {
-		return err
-	}
-
 	cmds := []string{
 		fmt.Sprintf(`docker rm %s`, project.Name),
 		fmt.Sprintf(`rm -f /etc/nginx/sites-available/%s`, project.Name),
 		fmt.Sprintf(`rm -f /etc/nginx/sites-enabled/%s`, project.Name),
-	}
-	if removeRepo {
-		cmds = append(cmds, fmt.Sprintf(`docker image rm %s && rm -r %s/%s`, strings.ToLower(repoPath), PROJECTS_ROOT, repoPath))
+		fmt.Sprintf(`rm -rf %s`, project.ProjectDir()),
 	}
 
 	for _, cmd := range cmds {
