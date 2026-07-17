@@ -20,12 +20,14 @@ import (
 )
 
 const (
+        PROJECTS_ROOT = "/app"
 	JAKELOUD    = "jakeloud"
-	CONF_FILE   = "/etc/jakeloud/conf.json"
-	SSH_KEY     = "/etc/jakeloud/id_rsa"
-	SSH_KEY_PUB = "/etc/jakeloud/id_rsa.pub"
 	LOG_MUTEX   = false
 )
+
+var CONF_FILE = PROJECTS_ROOT + "/conf.json"
+var SSH_KEY = PROJECTS_ROOT + "/id_rsa"
+var SSH_KEY_PUB = PROJECTS_ROOT + "/id_rsa.pub"
 
 var dry bool = false
 var dry_conf []byte = []byte("{\"apps\":[{\"name\":\"jakeloud\",\"port\":666}],\"users\":[]}")
@@ -302,7 +304,7 @@ func (project *Project) Clone() error {
 		return project.Save()
 	}
 
-	_, err = ExecWrapped(fmt.Sprintf(`rm -rf /etc/jakeloud/%s`, repoPath))
+	_, err = ExecWrapped(fmt.Sprintf(`rm -rf %s/%s`, PROJECTS_ROOT, repoPath))
 	if err != nil {
 		if LOG_MUTEX {
 			slog.Info("Lock", "project", project.Name)
@@ -316,7 +318,7 @@ func (project *Project) Clone() error {
 		return project.Save()
 	}
 
-	cmd := fmt.Sprintf(`eval "$(ssh-agent -s)"; ssh-add %s; git clone --depth 1 %s /etc/jakeloud/%s; kill $SSH_AGENT_PID`, SSH_KEY, project.Repo, repoPath)
+	cmd := fmt.Sprintf(`eval "$(ssh-agent -s)"; ssh-add %s; git clone --depth 1 %s %s/%s; kill $SSH_AGENT_PID`, SSH_KEY, project.Repo, PROJECTS_ROOT, repoPath)
 	_, err = ExecWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
@@ -358,7 +360,7 @@ func (project *Project) Build() error {
 		return err
 	}
 
-	cmd := fmt.Sprintf(`docker build -t %s /etc/jakeloud/%s`, strings.ToLower(repoPath), repoPath)
+	cmd := fmt.Sprintf(`docker build -t %s %s/%s`, strings.ToLower(repoPath), PROJECTS_ROOT, repoPath)
 	out, err := ExecWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
@@ -634,7 +636,7 @@ func (project *Project) Remove(removeRepo bool) error {
 		fmt.Sprintf(`rm -f /etc/nginx/sites-enabled/%s`, project.Name),
 	}
 	if removeRepo {
-		cmds = append(cmds, fmt.Sprintf(`docker image rm %s && rm -r /etc/jakeloud/%s`, strings.ToLower(repoPath), repoPath))
+		cmds = append(cmds, fmt.Sprintf(`docker image rm %s && rm -r %s/%s`, strings.ToLower(repoPath), PROJECTS_ROOT, repoPath))
 	}
 
 	for _, cmd := range cmds {
