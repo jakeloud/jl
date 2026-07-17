@@ -26,7 +26,6 @@ func Start(d bool) {
 		os.Exit(1)
 	}
 
-
 	l, err := link()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Alas, there's been an error: %v", err)

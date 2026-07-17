@@ -20,9 +20,9 @@ import (
 )
 
 const (
-        PROJECTS_ROOT = "/app"
-	JAKELOUD    = "jakeloud"
-	LOG_MUTEX   = false
+	PROJECTS_ROOT = "/app"
+	JAKELOUD      = "jakeloud"
+	LOG_MUTEX     = false
 )
 
 var CONF_FILE = PROJECTS_ROOT + "/conf.json"
@@ -48,8 +48,8 @@ type Project struct {
 }
 
 type Config struct {
-	Projects  []Project  `json:"apps"`
-	Users []User `json:"users"`
+	Projects []Project `json:"apps"`
+	Users    []User    `json:"users"`
 }
 
 type User struct {
@@ -85,8 +85,8 @@ func GetConf() (Config, error) {
 	if err != nil {
 		fmt.Printf("Problem with conf.json: %v\n", err)
 		conf = Config{
-			Projects:  []Project{{Name: JAKELOUD, Port: 666}},
-			Users: []User{},
+			Projects: []Project{{Name: JAKELOUD, Port: 666}},
+			Users:    []User{},
 		}
 		return conf, nil
 	}
