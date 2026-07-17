@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/jakeloud/jl/entities"
 )
 
 //go:embed jakeloud.service
@@ -15,10 +17,10 @@ var embeddedFile embed.FS
 const serviceDir = "/etc/systemd/system"
 
 func setupService(dry bool) error {
-	fmt.Printf("Creating dir %s\n", "/etc/jakeloud")
+	fmt.Printf("Creating dir %s\n", entities.PROJECTS_ROOT)
 	if !dry {
-		if err := os.MkdirAll("/etc/jakeloud", 0755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %v", "/etc/jakeloud", err)
+		if err := os.MkdirAll(entities.PROJECTS_ROOT, 0755); err != nil {
+			return fmt.Errorf("failed to create directory %s: %v", entities.PROJECTS_ROOT, err)
 		}
 	}
 
