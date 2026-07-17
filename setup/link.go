@@ -7,9 +7,9 @@ import (
 )
 
 func link() (string, error) {
-	app, err := entities.GetApp(entities.JAKELOUD)
+	project, err := entities.GetProject(entities.JAKELOUD)
 	if err == nil {
-		return fmt.Sprintf("https://%s", app.Domain), nil
+		return fmt.Sprintf("https://%s", project.Domain), nil
 	}
 
 	l, err := ip_getter.GetPublicIP()

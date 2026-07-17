@@ -6,7 +6,6 @@ import (
 	"errors"
 )
 
-// SetJakeloudDomain updates the domain and email of the JAKELOUD app if authenticated.
 func SetJakeloudDomain(params apiRequest) error {
 	conf, err := entities.GetConf()
 	if err != nil {
@@ -23,34 +22,34 @@ func SetJakeloudDomain(params apiRequest) error {
 		}
 	}
 
-	jakeloudApp, err := entities.GetApp(entities.JAKELOUD)
+	jakeloudProject, err := entities.GetProject(entities.JAKELOUD)
 	if err != nil {
 		return err
 	}
 
 	if params.Domain == "" {
-		params.Domain = jakeloudApp.Domain
+		params.Domain = jakeloudProject.Domain
 	}
 
-	jakeloudApp.Domain = params.Domain
-	jakeloudApp.Email = params.Email
-	jakeloudApp.State = "building"
+	jakeloudProject.Domain = params.Domain
+	jakeloudProject.Email = params.Email
+	jakeloudProject.State = "building"
 
-	if err := jakeloudApp.Save(); err != nil {
+	if err := jakeloudProject.Save(); err != nil {
 		return err
 	}
-	if err := jakeloudApp.Proxy(); err != nil {
+	if err := jakeloudProject.Proxy(); err != nil {
 		return err
 	}
-	if err := jakeloudApp.LoadState(); err != nil {
+	if err := jakeloudProject.LoadState(); err != nil {
 		return err
 	}
-	if jakeloudApp.Email != "" {
-		jakeloudApp.State = "starting"
-		if err := jakeloudApp.Save(); err != nil {
+	if jakeloudProject.Email != "" {
+		jakeloudProject.State = "starting"
+		if err := jakeloudProject.Save(); err != nil {
 			return err
 		}
-		if err := jakeloudApp.Cert(); err != nil {
+		if err := jakeloudProject.Cert(); err != nil {
 			return err
 		}
 	}

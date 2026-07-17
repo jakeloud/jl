@@ -4,7 +4,6 @@ import (
 	"github.com/jakeloud/jl/entities"
 )
 
-// SetJakeloudAdditional updates the additional field of the JAKELOUD app if authenticated and authorized.
 func SetJakeloudAdditional(params apiRequest) error {
 	if params.Additional == nil {
 		return nil
@@ -18,15 +17,15 @@ func SetJakeloudAdditional(params apiRequest) error {
 		return nil
 	}
 
-	jakeloudApp, err := entities.GetApp(entities.JAKELOUD)
+	jakeloudProject, err := entities.GetProject(entities.JAKELOUD)
 	if err != nil {
 		return err
 	}
 
-	if params.Email != jakeloudApp.Email {
+	if params.Email != jakeloudProject.Email {
 		return nil
 	}
 
-	jakeloudApp.Additional = params.Additional
-	return jakeloudApp.Save()
+	jakeloudProject.Additional = params.Additional
+	return jakeloudProject.Save()
 }

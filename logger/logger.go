@@ -14,20 +14,20 @@ func Log(message string) error {
 		message = "message unspecified"
 	}
 
-	app, err := entities.GetApp(entities.JAKELOUD)
+	project, err := entities.GetProject(entities.JAKELOUD)
 	if err != nil {
 		return err
 	}
 
-	if app.Additional == nil {
+	if project.Additional == nil {
 		return nil
 	}
 
-	botToken, ok := app.Additional["botToken"].(string)
+	botToken, ok := project.Additional["botToken"].(string)
 	if !ok {
 		return nil
 	}
-	chatId, ok := app.Additional["chatId"].(string)
+	chatId, ok := project.Additional["chatId"].(string)
 	if !ok {
 		return nil
 	}

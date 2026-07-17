@@ -4,11 +4,10 @@ import (
 	"github.com/jakeloud/jl/entities"
 )
 
-// DeleteApp stops and removes an application if the user is authenticated.
-func DeleteApp(params apiRequest) error {
-	app, err := entities.GetApp(params.Name)
+func DeleteProject(params apiRequest) error {
+	project, err := entities.GetProject(params.Name)
 	if err != nil {
-		return nil // Silently return if app not found
+		return nil
 	}
 
 	authenticated, err := entities.IsAuthenticated(params.Email, params.Password)
@@ -19,7 +18,7 @@ func DeleteApp(params apiRequest) error {
 		return nil
 	}
 
-	if err := app.Stop(); err != nil {
+	if err := project.Stop(); err != nil {
 		return err
 	}
 
@@ -30,8 +29,8 @@ func DeleteApp(params apiRequest) error {
 
 	isRepoUsedElsewhere := false
 	count := 0
-	for _, a := range conf.Apps {
-		if a.Repo == app.Repo {
+	for _, p := range conf.Projects {
+		if p.Repo == project.Repo {
 			count++
 			if count > 1 {
 				isRepoUsedElsewhere = true
@@ -40,5 +39,5 @@ func DeleteApp(params apiRequest) error {
 		}
 	}
 
-	return app.Remove(!isRepoUsedElsewhere)
+	return project.Remove(!isRepoUsedElsewhere)
 }

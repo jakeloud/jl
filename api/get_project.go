@@ -5,7 +5,7 @@ import (
 	"github.com/jakeloud/jl/entities"
 )
 
-func GetApp(params apiRequest) (interface{}, error) {
+func GetProject(params apiRequest) (interface{}, error) {
 	conf, err := entities.GetConf()
 	if err != nil {
 		return nil, err
@@ -26,27 +26,27 @@ func GetApp(params apiRequest) (interface{}, error) {
 		return map[string]string{"message": "name is undefined"}, nil
 	}
 
-	app, err := entities.GetApp(params.Name)
+	project, err := entities.GetProject(params.Name)
 	if err != nil {
 		return nil, err
 	}
-	if app.State == "🟢 running" {
+	if project.State == "🟢 running" {
 		cmd := fmt.Sprintf("docker logs %s", params.Name)
 		out, err := entities.ExecWrapped(cmd)
 		if err == nil {
-			app.Additional["logs"] = out
+			project.Additional["logs"] = out
 		} else {
-			app.Additional["logs"] = fmt.Sprintf("Failed to get logs: %v", err)
+			project.Additional["logs"] = fmt.Sprintf("Failed to get logs: %v", err)
 		}
 
 		cmd = fmt.Sprintf("docker ps --format json -f name=%s", params.Name)
 		out, err = entities.ExecWrapped(cmd)
 		if err == nil {
-			app.Additional["ps"] = out
+			project.Additional["ps"] = out
 		} else {
-			app.Additional["ps"] = fmt.Sprintf("Failed to get ps: %v", err)
+			project.Additional["ps"] = fmt.Sprintf("Failed to get ps: %v", err)
 		}
 	}
 
-	return app, nil
+	return project, nil
 }

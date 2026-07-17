@@ -34,7 +34,7 @@ func SetDry(d bool) {
 	dry = d
 }
 
-type App struct {
+type Project struct {
 	Name       string                 `json:"name"`
 	Domain     string                 `json:"domain,omitempty"`
 	Repo       string                 `json:"repo,omitempty"`
@@ -46,15 +46,8 @@ type App struct {
 }
 
 type Config struct {
-	Apps  []App  `json:"apps"`
+	Projects  []Project  `json:"apps"`
 	Users []User `json:"users"`
-	DBs   []DB   `json:"dbs"`
-}
-
-type DB struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
-	mu   sync.Mutex
 }
 
 type User struct {
@@ -90,9 +83,8 @@ func GetConf() (Config, error) {
 	if err != nil {
 		fmt.Printf("Problem with conf.json: %v\n", err)
 		conf = Config{
-			Apps:  []App{{Name: JAKELOUD, Port: 666}},
+			Projects:  []Project{{Name: JAKELOUD, Port: 666}},
 			Users: []User{},
-			DBs:   []DB{},
 		}
 		return conf, nil
 	}
@@ -129,7 +121,7 @@ func ClearCache() (string, error) {
 }
 
 func Start(server interface{}) error {
-	app, err := GetApp(JAKELOUD)
+	project, err := GetProject(JAKELOUD)
 	if err != nil {
 		return err
 	}
@@ -148,86 +140,86 @@ func Start(server interface{}) error {
 		}
 
 		if LOG_MUTEX {
-			slog.Info("Lock", "app", app.Name)
+			slog.Info("Lock", "project", project.Name)
 		}
-		app.mu.Lock()
-		if app.Additional == nil {
-			app.Additional = make(map[string]interface{})
+		project.mu.Lock()
+		if project.Additional == nil {
+			project.Additional = make(map[string]interface{})
 		}
-		app.Additional["sshKey"] = string(sshKey)
-		app.mu.Unlock()
+		project.Additional["sshKey"] = string(sshKey)
+		project.mu.Unlock()
 		if LOG_MUTEX {
-			slog.Info("Unlock", "app", app.Name)
+			slog.Info("Unlock", "project", project.Name)
 		}
 
-		if err := app.Save(); err != nil {
+		if err := project.Save(); err != nil {
 			return err
 		}
 	}
 
 	if LOG_MUTEX {
-		slog.Info("Lock", "app", app.Name)
+		slog.Info("Lock", "project", project.Name)
 	}
-	app.mu.Lock()
-	app.State = "building"
-	app.mu.Unlock()
+	project.mu.Lock()
+	project.State = "building"
+	project.mu.Unlock()
 	if LOG_MUTEX {
-		slog.Info("Unlock", "app", app.Name)
+		slog.Info("Unlock", "project", project.Name)
 	}
 
-	if app.Domain == "" {
+	if project.Domain == "" {
 		dom, err := ip_getter.GetPublicIP()
 		if err != nil {
 			slog.Info("Failed to get ip", "err", err)
 			return err
 		}
 		if LOG_MUTEX {
-			slog.Info("Lock", "app", app.Name)
+			slog.Info("Lock", "project", project.Name)
 		}
-		app.mu.Lock()
-		app.Domain = fmt.Sprintf("jakeloud.%s.sslip.io", dom)
-		app.mu.Unlock()
+		project.mu.Lock()
+		project.Domain = fmt.Sprintf("jakeloud.%s.sslip.io", dom)
+		project.mu.Unlock()
 		if LOG_MUTEX {
-			slog.Info("Unlock", "app", app.Name)
+			slog.Info("Unlock", "project", project.Name)
 		}
 	}
 
-	if err := app.Save(); err != nil {
+	if err := project.Save(); err != nil {
 		return err
 	}
-	if err := app.Proxy(); err != nil {
+	if err := project.Proxy(); err != nil {
 		return err
 	}
-	if err := app.LoadState(); err != nil {
+	if err := project.LoadState(); err != nil {
 		return err
 	}
 	if LOG_MUTEX {
-		slog.Info("Lock", "app", app.Name)
+		slog.Info("Lock", "project", project.Name)
 	}
-	app.mu.Lock()
-	app.State = "starting"
-	app.mu.Unlock()
+	project.mu.Lock()
+	project.State = "starting"
+	project.mu.Unlock()
 	if LOG_MUTEX {
-		slog.Info("Unlock", "app", app.Name)
+		slog.Info("Unlock", "project", project.Name)
 	}
-	if err := app.Save(); err != nil {
+	if err := project.Save(); err != nil {
 		return err
 	}
-	if err := app.Cert(); err != nil {
+	if err := project.Cert(); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (app *App) Save() error {
+func (project *Project) Save() error {
 	if LOG_MUTEX {
-		slog.Info("Lock", "app", app.Name)
+		slog.Info("Lock", "project", project.Name)
 	}
-	app.mu.Lock()
-	defer app.mu.Unlock()
+	project.mu.Lock()
+	defer project.mu.Unlock()
 	if LOG_MUTEX {
-		slog.Info("Unlock", "app", app.Name)
+		slog.Info("Unlock", "project", project.Name)
 	}
 
 	conf, err := GetConf()
@@ -235,25 +227,25 @@ func (app *App) Save() error {
 		return err
 	}
 
-	appIndex := -1
-	for i, a := range conf.Apps {
-		if a.Name == app.Name {
-			appIndex = i
+	projectIndex := -1
+	for i, p := range conf.Projects {
+		if p.Name == project.Name {
+			projectIndex = i
 			break
 		}
 	}
 
-	if appIndex == -1 {
-		conf.Apps = append(conf.Apps, *app)
+	if projectIndex == -1 {
+		conf.Projects = append(conf.Projects, *project)
 	} else {
-		conf.Apps[appIndex] = *app
+		conf.Projects[projectIndex] = *project
 	}
 
 	return SetConf(conf)
 }
 
-func (app *App) ShortRepoPath() (string, error) {
-	parts := strings.Split(app.Repo, ":")
+func (project *Project) ShortRepoPath() (string, error) {
+	parts := strings.Split(project.Repo, ":")
 	if len(parts) < 2 {
 		return "", errors.New("Repo format should be git@github.com:<user>/<repo>.git")
 	}
@@ -261,107 +253,107 @@ func (app *App) ShortRepoPath() (string, error) {
 	return path, nil
 }
 
-func (app *App) LoadState() error {
-	loadedApp, err := GetApp(app.Name)
+func (project *Project) LoadState() error {
+	loadedProject, err := GetProject(project.Name)
 	if err != nil {
 		return err
 	}
 	if LOG_MUTEX {
-		slog.Info("Lock", "app", app.Name)
+		slog.Info("Lock", "project", project.Name)
 	}
-	app.mu.Lock()
-	app.State = loadedApp.State
-	app.mu.Unlock()
+	project.mu.Lock()
+	project.State = loadedProject.State
+	project.mu.Unlock()
 	if LOG_MUTEX {
-		slog.Info("Unlock", "app", app.Name)
+		slog.Info("Unlock", "project", project.Name)
 	}
 	return nil
 }
 
-func (app *App) Clone() error {
-	slog.Info("Cloning", "app", app.Name)
-	if err := app.LoadState(); err != nil {
+func (project *Project) Clone() error {
+	slog.Info("Cloning", "project", project.Name)
+	if err := project.LoadState(); err != nil {
 		return err
 	}
 	if LOG_MUTEX {
-		slog.Info("Lock", "app", app.Name)
+		slog.Info("Lock", "project", project.Name)
 	}
-	app.mu.Lock()
-	app.State = "cloning"
-	app.mu.Unlock()
+	project.mu.Lock()
+	project.State = "cloning"
+	project.mu.Unlock()
 	if LOG_MUTEX {
-		slog.Info("Unlock", "app", app.Name)
+		slog.Info("Unlock", "project", project.Name)
 	}
-	if err := app.Save(); err != nil {
+	if err := project.Save(); err != nil {
 		return err
 	}
 
-	repoPath, err := app.ShortRepoPath()
+	repoPath, err := project.ShortRepoPath()
 	if err != nil {
 		if LOG_MUTEX {
-			slog.Info("Lock", "app", app.Name)
+			slog.Info("Lock", "project", project.Name)
 		}
-		app.mu.Lock()
-		app.State = fmt.Sprintf("Error: %v", err)
-		app.mu.Unlock()
+		project.mu.Lock()
+		project.State = fmt.Sprintf("Error: %v", err)
+		project.mu.Unlock()
 		if LOG_MUTEX {
-			slog.Info("Unlock", "app", app.Name)
+			slog.Info("Unlock", "project", project.Name)
 		}
-		return app.Save()
+		return project.Save()
 	}
 
 	_, err = ExecWrapped(fmt.Sprintf(`rm -rf /etc/jakeloud/%s`, repoPath))
 	if err != nil {
 		if LOG_MUTEX {
-			slog.Info("Lock", "app", app.Name)
+			slog.Info("Lock", "project", project.Name)
 		}
-		app.mu.Lock()
-		app.State = fmt.Sprintf("Error: %v", err)
-		app.mu.Unlock()
+		project.mu.Lock()
+		project.State = fmt.Sprintf("Error: %v", err)
+		project.mu.Unlock()
 		if LOG_MUTEX {
-			slog.Info("Unlock", "app", app.Name)
+			slog.Info("Unlock", "project", project.Name)
 		}
-		return app.Save()
+		return project.Save()
 	}
 
-	cmd := fmt.Sprintf(`eval "$(ssh-agent -s)"; ssh-add %s; git clone --depth 1 %s /etc/jakeloud/%s; kill $SSH_AGENT_PID`, SSH_KEY, app.Repo, repoPath)
+	cmd := fmt.Sprintf(`eval "$(ssh-agent -s)"; ssh-add %s; git clone --depth 1 %s /etc/jakeloud/%s; kill $SSH_AGENT_PID`, SSH_KEY, project.Repo, repoPath)
 	_, err = ExecWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
-			slog.Info("Lock", "app", app.Name)
+			slog.Info("Lock", "project", project.Name)
 		}
-		app.mu.Lock()
-		app.State = fmt.Sprintf("Error: %v", err)
-		app.mu.Unlock()
+		project.mu.Lock()
+		project.State = fmt.Sprintf("Error: %v", err)
+		project.mu.Unlock()
 		if LOG_MUTEX {
-			slog.Info("Unlock", "app", app.Name)
+			slog.Info("Unlock", "project", project.Name)
 		}
-		return app.Save()
+		return project.Save()
 	}
 	return nil
 }
 
-func (app *App) Build() error {
-	if err := app.LoadState(); err != nil {
+func (project *Project) Build() error {
+	if err := project.LoadState(); err != nil {
 		return err
 	}
-	if app.State != "cloning" {
+	if project.State != "cloning" {
 		return nil
 	}
 	if LOG_MUTEX {
-		slog.Info("Lock", "app", app.Name)
+		slog.Info("Lock", "project", project.Name)
 	}
-	app.mu.Lock()
-	app.State = "building"
-	app.mu.Unlock()
+	project.mu.Lock()
+	project.State = "building"
+	project.mu.Unlock()
 	if LOG_MUTEX {
-		slog.Info("Unlock", "app", app.Name)
+		slog.Info("Unlock", "project", project.Name)
 	}
-	if err := app.Save(); err != nil {
+	if err := project.Save(); err != nil {
 		return err
 	}
 
-	repoPath, err := app.ShortRepoPath()
+	repoPath, err := project.ShortRepoPath()
 	if err != nil {
 		return err
 	}
@@ -370,42 +362,42 @@ func (app *App) Build() error {
 	out, err := ExecWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
-			slog.Info("Lock", "app", app.Name)
+			slog.Info("Lock", "project", project.Name)
 		}
-		app.mu.Lock()
-		app.State = fmt.Sprintf("Error: %v\n%s", err, out)
-		app.mu.Unlock()
+		project.mu.Lock()
+		project.State = fmt.Sprintf("Error: %v\n%s", err, out)
+		project.mu.Unlock()
 		if LOG_MUTEX {
-			slog.Info("Unlock", "app", app.Name)
+			slog.Info("Unlock", "project", project.Name)
 		}
-		return app.Save()
+		return project.Save()
 	}
 	return nil
 }
 
-func (app *App) Proxy() error {
-	if err := app.LoadState(); err != nil {
+func (project *Project) Proxy() error {
+	if err := project.LoadState(); err != nil {
 		return err
 	}
-	if app.State != "building" {
+	if project.State != "building" {
 		return nil
 	}
 	if LOG_MUTEX {
-		slog.Info("Lock", "app", app.Name)
+		slog.Info("Lock", "project", project.Name)
 	}
-	app.mu.Lock()
-	app.State = "proxying"
-	app.mu.Unlock()
+	project.mu.Lock()
+	project.State = "proxying"
+	project.mu.Unlock()
 	if LOG_MUTEX {
-		slog.Info("Unlock", "app", app.Name)
+		slog.Info("Unlock", "project", project.Name)
 	}
-	if err := app.Save(); err != nil {
+	if err := project.Save(); err != nil {
 		return err
 	}
 
 	server_name := "undefined"
-	if app.Domain != "" {
-		server_name = app.Domain
+	if project.Domain != "" {
+		server_name = project.Domain
 	}
 
 	content := fmt.Sprintf(`
@@ -423,11 +415,11 @@ server {
 		proxy_set_header Upgrade $http_upgrade;
 		proxy_set_header Connection "upgrade";
 	}
-}`, server_name, app.Port)
+}`, server_name, project.Port)
 
 	file := "default"
-	if app.Name != JAKELOUD {
-		file = app.Name
+	if project.Name != JAKELOUD {
+		file = project.Name
 	}
 	filePath := fmt.Sprintf("/etc/nginx/sites-available/%s", file)
 
@@ -441,15 +433,15 @@ server {
 
 	if out, err := ExecWrapped("nginx -t"); err != nil {
 		if LOG_MUTEX {
-			slog.Info("Lock", "app", app.Name)
+			slog.Info("Lock", "project", project.Name)
 		}
-		app.mu.Lock()
-		app.State = fmt.Sprintf("Error: %v\n%s", err, out)
-		app.mu.Unlock()
+		project.mu.Lock()
+		project.State = fmt.Sprintf("Error: %v\n%s", err, out)
+		project.mu.Unlock()
 		if LOG_MUTEX {
-			slog.Info("Unlock", "app", app.Name)
+			slog.Info("Unlock", "project", project.Name)
 		}
-		return app.Save()
+		return project.Save()
 	}
 
 	enabledPath := fmt.Sprintf("/etc/nginx/sites-enabled/%s", file)
@@ -465,181 +457,181 @@ server {
 
 	if out, err := ExecWrapped("service nginx restart"); err != nil {
 		if LOG_MUTEX {
-			slog.Info("Lock", "app", app.Name)
+			slog.Info("Lock", "project", project.Name)
 		}
-		app.mu.Lock()
-		app.State = fmt.Sprintf("Error: %v\n%s", err, out)
-		app.mu.Unlock()
+		project.mu.Lock()
+		project.State = fmt.Sprintf("Error: %v\n%s", err, out)
+		project.mu.Unlock()
 		if LOG_MUTEX {
-			slog.Info("Unlock", "app", app.Name)
+			slog.Info("Unlock", "project", project.Name)
 		}
-		return app.Save()
+		return project.Save()
 	}
 	return nil
 }
 
-func (app *App) Start() error {
-	if err := app.LoadState(); err != nil {
+func (project *Project) Start() error {
+	if err := project.LoadState(); err != nil {
 		return err
 	}
-	if app.State != "proxying" {
+	if project.State != "proxying" {
 		return nil
 	}
 	if LOG_MUTEX {
-		slog.Info("Lock", "app", app.Name)
+		slog.Info("Lock", "project", project.Name)
 	}
-	app.mu.Lock()
-	app.State = "starting"
-	app.mu.Unlock()
+	project.mu.Lock()
+	project.State = "starting"
+	project.mu.Unlock()
 	if LOG_MUTEX {
-		slog.Info("Unlock", "app", app.Name)
+		slog.Info("Unlock", "project", project.Name)
 	}
-	if err := app.Save(); err != nil {
+	if err := project.Save(); err != nil {
 		return err
 	}
 
-	repoPath, err := app.ShortRepoPath()
+	repoPath, err := project.ShortRepoPath()
 	if err != nil {
 		return err
 	}
 
-	_, err = ExecWrapped(fmt.Sprintf(`if [ -z "$(docker ps -q -f name=%s)" ]; then echo "starting first time"; else docker stop %s && docker rm %s; fi`, app.Name, app.Name, app.Name))
+	_, err = ExecWrapped(fmt.Sprintf(`if [ -z "$(docker ps -q -f name=%s)" ]; then echo "starting first time"; else docker stop %s && docker rm %s; fi`, project.Name, project.Name, project.Name))
 	if err != nil {
 		return err
 	}
 
 	dockerOptions := ""
-	if opts, ok := app.Additional["dockerOptions"]; ok {
+	if opts, ok := project.Additional["dockerOptions"]; ok {
 		dockerOptions = opts.(string)
 	}
 
-	cmd := fmt.Sprintf(`docker run --name %s -d -p %d:80 %s %s`, app.Name, app.Port, dockerOptions, strings.ToLower(repoPath))
+	cmd := fmt.Sprintf(`docker run --name %s -d -p %d:80 %s %s`, project.Name, project.Port, dockerOptions, strings.ToLower(repoPath))
 	out, err := ExecWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
-			slog.Info("Lock", "app", app.Name)
+			slog.Info("Lock", "project", project.Name)
 		}
-		app.mu.Lock()
-		app.State = fmt.Sprintf("Error: %v\n%s", err, out)
-		app.mu.Unlock()
+		project.mu.Lock()
+		project.State = fmt.Sprintf("Error: %v\n%s", err, out)
+		project.mu.Unlock()
 		if LOG_MUTEX {
-			slog.Info("Unlock", "app", app.Name)
+			slog.Info("Unlock", "project", project.Name)
 		}
-		return app.Save()
+		return project.Save()
 	}
 	return nil
 }
 
-func (app *App) Cert() error {
-	if err := app.LoadState(); err != nil {
+func (project *Project) Cert() error {
+	if err := project.LoadState(); err != nil {
 		return err
 	}
-	if app.State != "starting" || app.Domain == "" {
+	if project.State != "starting" || project.Domain == "" {
 		return nil
 	}
 	if LOG_MUTEX {
-		slog.Info("Lock", "app", app.Name)
+		slog.Info("Lock", "project", project.Name)
 	}
-	app.mu.Lock()
-	app.State = "certing"
-	app.mu.Unlock()
+	project.mu.Lock()
+	project.State = "certing"
+	project.mu.Unlock()
 	if LOG_MUTEX {
-		slog.Info("Unlock", "app", app.Name)
+		slog.Info("Unlock", "project", project.Name)
 	}
-	if err := app.Save(); err != nil {
+	if err := project.Save(); err != nil {
 		return err
 	}
 
-	email := app.Email
+	email := project.Email
 	if email == "" {
 		email = "no-reply@gmail.com"
 	}
-	cmd := fmt.Sprintf(`certbot -n --agree-tos --email %s --nginx -d %s`, email, app.Domain)
+	cmd := fmt.Sprintf(`certbot -n --agree-tos --email %s --nginx -d %s`, email, project.Domain)
 	out, err := ExecWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
-			slog.Info("Lock", "app", app.Name)
+			slog.Info("Lock", "project", project.Name)
 		}
-		app.mu.Lock()
-		app.State = fmt.Sprintf("Error: %v\n%s", err, out)
-		app.mu.Unlock()
+		project.mu.Lock()
+		project.State = fmt.Sprintf("Error: %v\n%s", err, out)
+		project.mu.Unlock()
 		if LOG_MUTEX {
-			slog.Info("Unlock", "app", app.Name)
+			slog.Info("Unlock", "project", project.Name)
 		}
-		return app.Save()
+		return project.Save()
 	}
 
 	if LOG_MUTEX {
-		slog.Info("Lock", "app", app.Name)
+		slog.Info("Lock", "project", project.Name)
 	}
-	app.mu.Lock()
-	app.State = "🟢 running"
-	app.mu.Unlock()
+	project.mu.Lock()
+	project.State = "🟢 running"
+	project.mu.Unlock()
 	if LOG_MUTEX {
-		slog.Info("Unlock", "app", app.Name)
+		slog.Info("Unlock", "project", project.Name)
 	}
-	return app.Save()
+	return project.Save()
 }
 
-func (app *App) Stop() error {
+func (project *Project) Stop() error {
 	if LOG_MUTEX {
-		slog.Info("Lock", "app", app.Name)
+		slog.Info("Lock", "project", project.Name)
 	}
-	app.mu.Lock()
-	app.State = "stopping"
-	app.mu.Unlock()
+	project.mu.Lock()
+	project.State = "stopping"
+	project.mu.Unlock()
 	if LOG_MUTEX {
-		slog.Info("Unlock", "app", app.Name)
+		slog.Info("Unlock", "project", project.Name)
 	}
-	if err := app.Save(); err != nil {
+	if err := project.Save(); err != nil {
 		return err
 	}
 
-	out, err := ExecWrapped(fmt.Sprintf(`docker stop %s`, app.Name))
+	out, err := ExecWrapped(fmt.Sprintf(`docker stop %s`, project.Name))
 	if err != nil {
 		if LOG_MUTEX {
-			slog.Info("Lock", "app", app.Name)
+			slog.Info("Lock", "project", project.Name)
 		}
-		app.mu.Lock()
-		app.State = fmt.Sprintf("Error: %v\n%s", err, out)
-		app.mu.Unlock()
+		project.mu.Lock()
+		project.State = fmt.Sprintf("Error: %v\n%s", err, out)
+		project.mu.Unlock()
 		if LOG_MUTEX {
-			slog.Info("Unlock", "app", app.Name)
+			slog.Info("Unlock", "project", project.Name)
 		}
-		return app.Save()
+		return project.Save()
 	}
 	return nil
 }
 
-func (app *App) Remove(removeRepo bool) error {
-	if err := app.LoadState(); err != nil {
+func (project *Project) Remove(removeRepo bool) error {
+	if err := project.LoadState(); err != nil {
 		return err
 	}
-	if strings.HasPrefix(app.State, "Error") {
+	if strings.HasPrefix(project.State, "Error") {
 		return nil
 	}
 	if LOG_MUTEX {
-		slog.Info("Lock", "app", app.Name)
+		slog.Info("Lock", "project", project.Name)
 	}
-	app.mu.Lock()
-	app.State = "removing"
-	app.mu.Unlock()
+	project.mu.Lock()
+	project.State = "removing"
+	project.mu.Unlock()
 	if LOG_MUTEX {
-		slog.Info("Unlock", "app", app.Name)
+		slog.Info("Unlock", "project", project.Name)
 	}
-	if err := app.Save(); err != nil {
+	if err := project.Save(); err != nil {
 		return err
 	}
 
-	repoPath, err := app.ShortRepoPath()
+	repoPath, err := project.ShortRepoPath()
 	if err != nil {
 		return err
 	}
 
 	cmds := []string{
-		fmt.Sprintf(`docker rm %s`, app.Name),
-		fmt.Sprintf(`rm -f /etc/nginx/sites-available/%s`, app.Name),
-		fmt.Sprintf(`rm -f /etc/nginx/sites-enabled/%s`, app.Name),
+		fmt.Sprintf(`docker rm %s`, project.Name),
+		fmt.Sprintf(`rm -f /etc/nginx/sites-available/%s`, project.Name),
+		fmt.Sprintf(`rm -f /etc/nginx/sites-enabled/%s`, project.Name),
 	}
 	if removeRepo {
 		cmds = append(cmds, fmt.Sprintf(`docker image rm %s && rm -r /etc/jakeloud/%s`, strings.ToLower(repoPath), repoPath))
@@ -649,15 +641,15 @@ func (app *App) Remove(removeRepo bool) error {
 		out, err := ExecWrapped(cmd)
 		if err != nil {
 			if LOG_MUTEX {
-				slog.Info("Lock", "app", app.Name)
+				slog.Info("Lock", "project", project.Name)
 			}
-			app.mu.Lock()
-			app.State = fmt.Sprintf("Error: %v\n%s", err, out)
-			app.mu.Unlock()
+			project.mu.Lock()
+			project.State = fmt.Sprintf("Error: %v\n%s", err, out)
+			project.mu.Unlock()
 			if LOG_MUTEX {
-				slog.Info("Unlock", "app", app.Name)
+				slog.Info("Unlock", "project", project.Name)
 			}
-			return app.Save()
+			return project.Save()
 		}
 	}
 
@@ -665,56 +657,56 @@ func (app *App) Remove(removeRepo bool) error {
 	if err != nil {
 		return err
 	}
-	newApps := make([]App, 0)
-	for _, a := range conf.Apps {
-		if a.Name != app.Name {
-			newApps = append(newApps, a)
+	newProjects := make([]Project, 0)
+	for _, p := range conf.Projects {
+		if p.Name != project.Name {
+			newProjects = append(newProjects, p)
 		}
 	}
-	conf.Apps = newApps
+	conf.Projects = newProjects
 	return SetConf(conf)
 }
 
-func (app *App) IsError() bool {
-	return app.State != "" && strings.HasPrefix(app.State, "Error")
+func (project *Project) IsError() bool {
+	return project.State != "" && strings.HasPrefix(project.State, "Error")
 }
 
-func (app *App) Advance(force bool) error {
-	if (app.State == "🟢 running" || app.IsError()) && !force {
+func (project *Project) Advance(force bool) error {
+	if (project.State == "🟢 running" || project.IsError()) && !force {
 		return nil
 	}
-	switch app.State {
+	switch project.State {
 	case "cloning":
-		app.Build()
+		project.Build()
 		break
 	case "building":
-		app.Proxy()
+		project.Proxy()
 		break
 	case "proxying":
-		app.Start()
+		project.Start()
 		break
 	case "starting":
-		app.Cert()
+		project.Cert()
 		break
 	default:
-		if err := app.Clone(); err != nil {
+		if err := project.Clone(); err != nil {
 			return err
 		}
 	}
-	return app.Advance(false)
+	return project.Advance(false)
 }
 
-func GetApp(name string) (App, error) {
+func GetProject(name string) (Project, error) {
 	conf, err := GetConf()
 	if err != nil {
-		return App{}, err
+		return Project{}, err
 	}
-	for _, app := range conf.Apps {
-		if app.Name == name {
-			return app, nil
+	for _, project := range conf.Projects {
+		if project.Name == name {
+			return project, nil
 		}
 	}
-	return App{}, errors.New("app not found")
+	return Project{}, errors.New("project not found")
 }
 
 func IsAuthenticated(email, password string) (bool, error) {
@@ -763,73 +755,4 @@ func SetUser(email, password string) error {
 	}
 
 	return SetConf(conf)
-}
-
-func (db *DB) Save() error {
-	if LOG_MUTEX {
-		slog.Info("Lock", "db", db.Name)
-	}
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	if LOG_MUTEX {
-		slog.Info("Unlock", "db", db.Name)
-	}
-
-	conf, err := GetConf()
-	if err != nil {
-		return err
-	}
-
-	dbIndex := -1
-	for i, d := range conf.DBs {
-		if d.Name == db.Name {
-			dbIndex = i
-			break
-		}
-	}
-
-	if dbIndex == -1 {
-		conf.DBs = append(conf.DBs, *db)
-	} else {
-		conf.DBs[dbIndex] = *db
-	}
-
-	return SetConf(conf)
-}
-
-func (db *DB) Remove() error {
-	if LOG_MUTEX {
-		slog.Info("Lock", "db", db.Name)
-	}
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	if LOG_MUTEX {
-		slog.Info("Unlock", "db", db.Name)
-	}
-
-	conf, err := GetConf()
-	if err != nil {
-		return err
-	}
-	newDBs := make([]DB, 0)
-	for _, d := range conf.DBs {
-		if d.Name != db.Name {
-			newDBs = append(newDBs, d)
-		}
-	}
-	conf.DBs = newDBs
-	return SetConf(conf)
-}
-
-func GetDB(name string) (DB, error) {
-	conf, err := GetConf()
-	if err != nil {
-		return DB{}, err
-	}
-	for _, db := range conf.DBs {
-		if db.Name == name {
-			return db, nil
-		}
-	}
-	return DB{}, errors.New("db not found")
 }

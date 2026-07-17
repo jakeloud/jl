@@ -7,7 +7,6 @@ import (
 	"github.com/jakeloud/jl/logger"
 )
 
-// ClearCacheOp clears the Docker cache if the user is authenticated.
 func ClearCacheOp(params apiRequest) error {
 	conf, err := entities.GetConf()
 	if err != nil {
@@ -29,14 +28,12 @@ func ClearCacheOp(params apiRequest) error {
 		return err
 	}
 
-	// Trim and extract the last line
 	res = strings.TrimSpace(res)
 	lastLine := res
 	if idx := strings.LastIndex(res, "\n"); idx != -1 {
 		lastLine = res[idx+1:]
 	}
 
-	// Escape periods for MarkdownV2
 	lastLine = strings.ReplaceAll(lastLine, ".", "\\.")
 	logMessage := "*Clearing cache* " + lastLine
 
