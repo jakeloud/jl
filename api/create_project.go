@@ -16,7 +16,7 @@ func CreateProject(params apiRequest) error {
 	if err != nil {
 		return fmt.Errorf("authentication check failed: %v", err)
 	}
-	if !authenticated || params.Domain == "" || params.Repo == "" || params.Name == "" || params.Email == "" {
+	if !authenticated || params.Repo == "" || params.Name == "" || params.Email == "" {
 		return nil
 	}
 

@@ -478,6 +478,18 @@ func (project *Project) Proxy() error {
 	if project.State != "starting" {
 		return nil
 	}
+	if project.Domain == "" {
+		if LOG_MUTEX {
+			slog.Info("Lock", "project", project.Name)
+		}
+		project.mu.Lock()
+		project.State = "cleanup"
+		project.mu.Unlock()
+		if LOG_MUTEX {
+			slog.Info("Unlock", "project", project.Name)
+		}
+		return project.Save()
+	}
 	if LOG_MUTEX {
 		slog.Info("Lock", "project", project.Name)
 	}
@@ -617,8 +629,20 @@ func (project *Project) Cert() error {
 	if err := project.LoadState(); err != nil {
 		return err
 	}
-	if project.State != "proxying" || project.Domain == "" {
+	if project.State != "proxying" {
 		return nil
+	}
+	if project.Domain == "" {
+		if LOG_MUTEX {
+			slog.Info("Lock", "project", project.Name)
+		}
+		project.mu.Lock()
+		project.State = "cleanup"
+		project.mu.Unlock()
+		if LOG_MUTEX {
+			slog.Info("Unlock", "project", project.Name)
+		}
+		return project.Save()
 	}
 	if LOG_MUTEX {
 		slog.Info("Lock", "project", project.Name)
