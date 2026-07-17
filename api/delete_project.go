@@ -22,22 +22,5 @@ func DeleteProject(params apiRequest) error {
 		return err
 	}
 
-	conf, err := entities.GetConf()
-	if err != nil {
-		return err
-	}
-
-	isRepoUsedElsewhere := false
-	count := 0
-	for _, p := range conf.Projects {
-		if p.Repo == project.Repo {
-			count++
-			if count > 1 {
-				isRepoUsedElsewhere = true
-				break
-			}
-		}
-	}
-
-	return project.Remove(!isRepoUsedElsewhere)
+	return project.Remove()
 }
