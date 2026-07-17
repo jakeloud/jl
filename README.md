@@ -21,7 +21,7 @@ Execute this on the server:
 sudo su
 ```
 ```
-wget https://github.com/jakeloud/jl/releases/download/v1.1.0/jl
+wget https://github.com/jakeloud/jl/releases/download/v1.1.1/jl
 chmod +x jl
 ./jl
 ```
