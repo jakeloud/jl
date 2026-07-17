@@ -30,8 +30,18 @@ func GetProject(params apiRequest) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
+	if project.Additional == nil {
+		project.Additional = make(map[string]interface{})
+	}
 	if project.State == "🟢 running" {
-		cmd := fmt.Sprintf("docker logs %s", params.Name)
+		containerName, err := project.CurrentContainerName()
+		if err != nil {
+			project.Additional["logs"] = fmt.Sprintf("Failed to get current container: %v", err)
+			project.Additional["ps"] = fmt.Sprintf("Failed to get current container: %v", err)
+			return project, nil
+		}
+
+		cmd := fmt.Sprintf("docker logs %s", containerName)
 		out, err := entities.ExecWrapped(cmd)
 		if err == nil {
 			project.Additional["logs"] = out
@@ -39,7 +49,7 @@ func GetProject(params apiRequest) (interface{}, error) {
 			project.Additional["logs"] = fmt.Sprintf("Failed to get logs: %v", err)
 		}
 
-		cmd = fmt.Sprintf("docker ps --format json -f name=%s", params.Name)
+		cmd = fmt.Sprintf("docker ps --format json -f name=%s", containerName)
 		out, err = entities.ExecWrapped(cmd)
 		if err == nil {
 			project.Additional["ps"] = out
