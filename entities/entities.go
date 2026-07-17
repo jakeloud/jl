@@ -166,7 +166,7 @@ func Start(server interface{}) error {
 		slog.Info("Lock", "project", project.Name)
 	}
 	project.mu.Lock()
-	project.State = "building"
+	project.State = "starting"
 	project.mu.Unlock()
 	if LOG_MUTEX {
 		slog.Info("Unlock", "project", project.Name)
@@ -196,18 +196,6 @@ func Start(server interface{}) error {
 		return err
 	}
 	if err := project.LoadState(); err != nil {
-		return err
-	}
-	if LOG_MUTEX {
-		slog.Info("Lock", "project", project.Name)
-	}
-	project.mu.Lock()
-	project.State = "starting"
-	project.mu.Unlock()
-	if LOG_MUTEX {
-		slog.Info("Unlock", "project", project.Name)
-	}
-	if err := project.Save(); err != nil {
 		return err
 	}
 	if err := project.Cert(); err != nil {
@@ -257,6 +245,10 @@ func (project *Project) DockerImage() string {
 	return strings.ToLower(project.Name)
 }
 
+func (project *Project) ReleaseContainerName(releaseNumber int) string {
+	return fmt.Sprintf("%s-r%d", project.Name, releaseNumber)
+}
+
 func releaseNumber(name string) (int, bool) {
 	if !strings.HasPrefix(name, "r") {
 		return 0, false
@@ -293,9 +285,30 @@ func (project *Project) ReleaseDirs() (map[int]string, error) {
 }
 
 func (project *Project) CurrentReleaseDir() (string, error) {
-	releases, err := project.ReleaseDirs()
+	current, releases, err := project.CurrentRelease()
 	if err != nil {
 		return "", err
+	}
+	return releases[current], nil
+}
+
+func (project *Project) CurrentReleaseNumber() (int, error) {
+	current, _, err := project.CurrentRelease()
+	return current, err
+}
+
+func (project *Project) CurrentContainerName() (string, error) {
+	current, err := project.CurrentReleaseNumber()
+	if err != nil {
+		return "", err
+	}
+	return project.ReleaseContainerName(current), nil
+}
+
+func (project *Project) CurrentRelease() (int, map[int]string, error) {
+	releases, err := project.ReleaseDirs()
+	if err != nil {
+		return 0, releases, err
 	}
 
 	current := 0
@@ -305,9 +318,9 @@ func (project *Project) CurrentReleaseDir() (string, error) {
 		}
 	}
 	if current == 0 {
-		return "", errors.New("release not found")
+		return 0, releases, errors.New("release not found")
 	}
-	return releases[current], nil
+	return current, releases, nil
 }
 
 func (project *Project) NewRelease() (string, error) {
@@ -462,8 +475,20 @@ func (project *Project) Proxy() error {
 	if err := project.LoadState(); err != nil {
 		return err
 	}
-	if project.State != "building" {
+	if project.State != "starting" {
 		return nil
+	}
+	if project.Domain == "" {
+		if LOG_MUTEX {
+			slog.Info("Lock", "project", project.Name)
+		}
+		project.mu.Lock()
+		project.State = "cleanup"
+		project.mu.Unlock()
+		if LOG_MUTEX {
+			slog.Info("Unlock", "project", project.Name)
+		}
+		return project.Save()
 	}
 	if LOG_MUTEX {
 		slog.Info("Lock", "project", project.Name)
@@ -557,7 +582,7 @@ func (project *Project) Start() error {
 	if err := project.LoadState(); err != nil {
 		return err
 	}
-	if project.State != "proxying" {
+	if project.State != "building" {
 		return nil
 	}
 	if LOG_MUTEX {
@@ -573,7 +598,7 @@ func (project *Project) Start() error {
 		return err
 	}
 
-	_, err = ExecWrapped(fmt.Sprintf(`if [ -z "$(docker ps -q -f name=%s)" ]; then echo "starting first time"; else docker stop %s && docker rm %s; fi`, project.Name, project.Name, project.Name))
+	containerName, err := project.CurrentContainerName()
 	if err != nil {
 		return err
 	}
@@ -583,7 +608,7 @@ func (project *Project) Start() error {
 		dockerOptions = opts.(string)
 	}
 
-	cmd := fmt.Sprintf(`docker run --name %s -d -p %d:80 %s %s`, project.Name, project.Port, dockerOptions, project.DockerImage())
+	cmd := fmt.Sprintf(`docker run --name %s -d -p %d:80 %s %s`, containerName, project.Port, dockerOptions, project.DockerImage())
 	out, err := ExecWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
@@ -604,8 +629,20 @@ func (project *Project) Cert() error {
 	if err := project.LoadState(); err != nil {
 		return err
 	}
-	if project.State != "starting" || project.Domain == "" {
+	if project.State != "proxying" {
 		return nil
+	}
+	if project.Domain == "" {
+		if LOG_MUTEX {
+			slog.Info("Lock", "project", project.Name)
+		}
+		project.mu.Lock()
+		project.State = "cleanup"
+		project.mu.Unlock()
+		if LOG_MUTEX {
+			slog.Info("Unlock", "project", project.Name)
+		}
+		return project.Save()
 	}
 	if LOG_MUTEX {
 		slog.Info("Lock", "project", project.Name)
@@ -625,6 +662,50 @@ func (project *Project) Cert() error {
 		email = "no-reply@gmail.com"
 	}
 	cmd := fmt.Sprintf(`certbot -n --agree-tos --email %s --nginx -d %s`, email, project.Domain)
+	out, err := ExecWrapped(cmd)
+	if err != nil {
+		if LOG_MUTEX {
+			slog.Info("Lock", "project", project.Name)
+		}
+		project.mu.Lock()
+		project.State = fmt.Sprintf("Error: %v\n%s", err, out)
+		project.mu.Unlock()
+		if LOG_MUTEX {
+			slog.Info("Unlock", "project", project.Name)
+		}
+		return project.Save()
+	}
+
+	if LOG_MUTEX {
+		slog.Info("Lock", "project", project.Name)
+	}
+	nextState := "cleanup"
+	if project.Name == JAKELOUD {
+		nextState = "🟢 running"
+	}
+	project.mu.Lock()
+	project.State = nextState
+	project.mu.Unlock()
+	if LOG_MUTEX {
+		slog.Info("Unlock", "project", project.Name)
+	}
+	return project.Save()
+}
+
+func (project *Project) Cleanup() error {
+	if err := project.LoadState(); err != nil {
+		return err
+	}
+	if project.State != "cleanup" {
+		return nil
+	}
+
+	currentContainer, err := project.CurrentContainerName()
+	if err != nil {
+		return err
+	}
+
+	cmd := fmt.Sprintf(`for container in $(docker ps -a --format '{{.Names}}' --filter name=^/%s-r); do if [ "$container" != "%s" ]; then docker stop "$container" || true; docker rm "$container" || true; fi; done`, project.Name, currentContainer)
 	out, err := ExecWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
@@ -665,7 +746,12 @@ func (project *Project) Stop() error {
 		return err
 	}
 
-	out, err := ExecWrapped(fmt.Sprintf(`docker stop %s`, project.Name))
+	containerName, err := project.CurrentContainerName()
+	if err != nil {
+		return err
+	}
+
+	out, err := ExecWrapped(fmt.Sprintf(`docker stop %s`, containerName))
 	if err != nil {
 		if LOG_MUTEX {
 			slog.Info("Lock", "project", project.Name)
@@ -702,7 +788,7 @@ func (project *Project) Remove() error {
 	}
 
 	cmds := []string{
-		fmt.Sprintf(`docker rm %s`, project.Name),
+		fmt.Sprintf(`for container in $(docker ps -a --format '{{.Names}}' --filter name=^/%s-r); do docker stop "$container" || true; docker rm "$container" || true; done`, project.Name),
 		fmt.Sprintf(`rm -f /etc/nginx/sites-available/%s`, project.Name),
 		fmt.Sprintf(`rm -f /etc/nginx/sites-enabled/%s`, project.Name),
 		fmt.Sprintf(`rm -rf %s`, project.ProjectDir()),
@@ -748,17 +834,25 @@ func (project *Project) Advance(force bool) error {
 	}
 	switch project.State {
 	case "cloning":
-		project.Build()
-		break
+		if err := project.Build(); err != nil {
+			return err
+		}
 	case "building":
-		project.Proxy()
-		break
-	case "proxying":
-		project.Start()
-		break
+		if err := project.Start(); err != nil {
+			return err
+		}
 	case "starting":
-		project.Cert()
-		break
+		if err := project.Proxy(); err != nil {
+			return err
+		}
+	case "proxying":
+		if err := project.Cert(); err != nil {
+			return err
+		}
+	case "cleanup":
+		if err := project.Cleanup(); err != nil {
+			return err
+		}
 	default:
 		if err := project.Clone(); err != nil {
 			return err

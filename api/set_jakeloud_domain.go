@@ -33,7 +33,7 @@ func SetJakeloudDomain(params apiRequest) error {
 
 	jakeloudProject.Domain = params.Domain
 	jakeloudProject.Email = params.Email
-	jakeloudProject.State = "building"
+	jakeloudProject.State = "starting"
 
 	if err := jakeloudProject.Save(); err != nil {
 		return err
@@ -45,10 +45,6 @@ func SetJakeloudDomain(params apiRequest) error {
 		return err
 	}
 	if jakeloudProject.Email != "" {
-		jakeloudProject.State = "starting"
-		if err := jakeloudProject.Save(); err != nil {
-			return err
-		}
 		if err := jakeloudProject.Cert(); err != nil {
 			return err
 		}

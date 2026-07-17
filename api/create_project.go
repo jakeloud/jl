@@ -16,7 +16,7 @@ func CreateProject(params apiRequest) error {
 	if err != nil {
 		return fmt.Errorf("authentication check failed: %v", err)
 	}
-	if !authenticated || params.Domain == "" || params.Repo == "" || params.Name == "" || params.Email == "" {
+	if !authenticated || params.Repo == "" || params.Name == "" || params.Email == "" {
 		return nil
 	}
 
@@ -25,34 +25,14 @@ func CreateProject(params apiRequest) error {
 		return fmt.Errorf("failed to get config: %v", err)
 	}
 
-	port := 0
-	// Find an available port
 	takenPorts := make(map[int]int)
 	for _, p := range conf.Projects {
-		n, exists := takenPorts[p.Port]
-		if exists {
-			takenPorts[p.Port] = n + 1
-		} else {
-			takenPorts[p.Port] = 1
-		}
-		if p.Name == params.Name {
-			port = p.Port
-		}
+		takenPorts[p.Port]++
 	}
 
-	if port != 0 {
-		n, _ := takenPorts[port]
-		if n != 1 {
-			port = 38000
-			for takenPorts[port] > 0 {
-				port++
-			}
-		}
-	} else {
-		port = 38000
-		for takenPorts[port] > 0 {
-			port++
-		}
+	port := 38000
+	for takenPorts[port] > 0 {
+		port++
 	}
 
 	dockerOptions := params.DockerOptions

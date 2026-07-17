@@ -4,12 +4,11 @@ implemented:
 
 1) `projects-root` - `/etc/jakeloud/` for olds. configurable through env var `/app` now
 2) "releases" concept: `/app/<project.Name>/r<Release number>` becomes directory for git clone, `/app/<project.Name>` is available to store persistent data. For example, `/app/<project.Name>/data`. Jakeloud maintains two latest releases (current + previous)
-
-implementing right now:
-
 3) we don't need to cleanup images and old repos now because of releases. We just remove project dir.
 4) Blue-Green deploy. newer release allocates another port. How to do switch? we need to run proxy step after start, the same old way
 5) domain becomes optional. If domain not set - no proxying step is required.
+
+implementing right now:
 
 implementing after a short while:
 
