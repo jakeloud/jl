@@ -25,12 +25,25 @@ func CreateProject(params apiRequest) error {
 	}
 
 	cmd := ""
+	cmdProvided := false
 	if params.Additional != nil {
 		if value, exists := params.Additional["cmd"]; exists {
+			cmdProvided = true
 			var ok bool
 			cmd, ok = value.(string)
 			if !ok {
 				return fmt.Errorf("additional.cmd must be a string")
+			}
+		}
+	}
+	if !cmdProvided {
+		if existing, err := entities.GetProject(params.Name); err == nil && existing.Additional != nil {
+			if value, exists := existing.Additional["cmd"]; exists {
+				var ok bool
+				cmd, ok = value.(string)
+				if !ok {
+					return fmt.Errorf("persisted additional.cmd must be a string")
+				}
 			}
 		}
 	}
