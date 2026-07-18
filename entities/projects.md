@@ -16,5 +16,4 @@ implementing after a short while:
 
 Refactor:
 
-9) Cert + Proxy - 1 step
-10) do the frontend
+9) do the frontend
