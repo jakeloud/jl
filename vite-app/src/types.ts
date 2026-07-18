@@ -29,15 +29,9 @@ export interface Project {
   additional?: ProjectAdditional
 }
 
-export interface DB {
-        name: string
-        path: string
-}
-
 export interface JakeLoudConfig {
   message?: "login" | "register"
   apps?: Project[]
-  dbs?: DB[]
 }
 
 export interface LoginData {
