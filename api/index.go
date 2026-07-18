@@ -8,15 +8,14 @@ import (
 
 // apiRequest represents the expected JSON body structure.
 type apiRequest struct {
-	Op            string                 `json:"op"`
-	Email         string                 `json:"email"`
-	Password      string                 `json:"password"`
-	Domain        string                 `json:"domain"`
-	Name          string                 `json:"name"`
-	Repo          string                 `json:"repo"`
-	Release       int                    `json:"release"`
-	DockerOptions string                 `json:"dockerOptions"`
-	Additional    map[string]interface{} `json:"additional"`
+	Op         string                 `json:"op"`
+	Email      string                 `json:"email"`
+	Password   string                 `json:"password"`
+	Domain     string                 `json:"domain"`
+	Name       string                 `json:"name"`
+	Repo       string                 `json:"repo"`
+	Release    int                    `json:"release"`
+	Additional map[string]interface{} `json:"additional"`
 }
 
 func API(w http.ResponseWriter, r *http.Request) {

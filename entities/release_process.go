@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -16,7 +18,7 @@ type Release struct {
 	ProjectName   string
 	Number        int
 	Port          int
-	ContainerName string
+	ID            string
 	Cmd           *exec.Cmd
 	Done          chan struct{}
 	Promote       chan promotionRequest
@@ -29,6 +31,14 @@ type Release struct {
 
 type promotionRequest struct {
 	result chan error
+}
+
+type ReleaseRuntime struct {
+	Release           int    `json:"release"`
+	PID               int    `json:"pid,omitempty"`
+	Alive             bool   `json:"alive"`
+	Active            bool   `json:"active"`
+	PromotionDeadline string `json:"promotionDeadline,omitempty"`
 }
 
 var (
@@ -56,14 +66,14 @@ func notifyReleaseFailure(message string) {
 
 func registerRelease(release *Release) {
 	releasesMu.Lock()
-	releases[release.ContainerName] = release
+	releases[release.ID] = release
 	releasesMu.Unlock()
 }
 
 func unregisterRelease(release *Release) {
 	releasesMu.Lock()
-	if current, ok := releases[release.ContainerName]; ok && current == release {
-		delete(releases, release.ContainerName)
+	if current, ok := releases[release.ID]; ok && current == release {
+		delete(releases, release.ID)
 	}
 	releasesMu.Unlock()
 }
@@ -91,11 +101,27 @@ func reservedReleasePorts() map[int]bool {
 }
 
 func getRelease(projectName string, releaseNumber int) (*Release, bool) {
-	containerName := fmt.Sprintf("%s-r%d", projectName, releaseNumber)
 	releasesMu.RLock()
-	release, ok := releases[containerName]
+	release, ok := releases[releaseID(projectName, releaseNumber)]
 	releasesMu.RUnlock()
 	return release, ok
+}
+
+func ReleaseRuntimeStatus(projectName string, releaseNumber int) ReleaseRuntime {
+	status := ReleaseRuntime{Release: releaseNumber}
+	release, ok := getRelease(projectName, releaseNumber)
+	if !ok {
+		return status
+	}
+	status.Alive = release.alive.Load()
+	status.Active = release.active.Load()
+	if release.Cmd.Process != nil {
+		status.PID = release.Cmd.Process.Pid
+	}
+	if deadline, ok := ReleasePromotionDeadline(projectName, releaseNumber); ok {
+		status.PromotionDeadline = deadline.Format(time.RFC3339)
+	}
+	return status
 }
 
 func ReleasePromotionDeadline(projectName string, releaseNumber int) (time.Time, bool) {
@@ -116,7 +142,7 @@ func requestReleaseStop(release *Release) {
 	if release.Cmd.Process != nil {
 		err := syscall.Kill(-release.Cmd.Process.Pid, syscall.SIGTERM)
 		if err != nil && !errors.Is(err, os.ErrProcessDone) && !errors.Is(err, syscall.ESRCH) {
-			slog.Info("Failed to signal release", "container", release.ContainerName, "err", err)
+			slog.Info("Failed to signal release", "release", release.ID, "err", err)
 		}
 	}
 }
@@ -159,6 +185,46 @@ func BeginShutdown() {
 	shuttingDown.Store(true)
 }
 
+func releaseID(projectName string, releaseNumber int) string {
+	return fmt.Sprintf("%s-r%d", projectName, releaseNumber)
+}
+
+func (project *Project) defaultDeployCommand() string {
+	image := project.DockerImage()
+	return fmt.Sprintf(`docker build -t %s . && exec docker run -p "$PORT":80 --rm %s`, image, image)
+}
+
+func (project *Project) deployCommand() (string, error) {
+	if project.Additional == nil {
+		project.Additional = make(map[string]interface{})
+	}
+	delete(project.Additional, "dockerOptions")
+	value, exists := project.Additional["cmd"]
+	if exists {
+		command, ok := value.(string)
+		if !ok {
+			return "", errors.New("additional.cmd must be a string")
+		}
+		if strings.TrimSpace(command) != "" {
+			return command, nil
+		}
+	}
+	command := project.defaultDeployCommand()
+	project.Additional["cmd"] = command
+	return command, nil
+}
+
+func releaseEnvironment(port int) []string {
+	environment := os.Environ()
+	result := make([]string, 0, len(environment)+1)
+	for _, variable := range environment {
+		if !strings.HasPrefix(variable, "PORT=") {
+			result = append(result, variable)
+		}
+	}
+	return append(result, "PORT="+strconv.Itoa(port))
+}
+
 func (project *Project) BuildAndRun() error {
 	if shuttingDown.Load() {
 		return errors.New("jakeloud is shutting down")
@@ -177,17 +243,18 @@ func (project *Project) BuildAndRun() error {
 	if err != nil {
 		return err
 	}
-	containerName := project.ReleaseContainerName(releaseNumber)
-	dockerOptions := ""
-	if opts, ok := project.Additional["dockerOptions"].(string); ok {
-		dockerOptions = opts
+	releaseID := project.ReleaseID(releaseNumber)
+	command, err := project.deployCommand()
+	if err != nil {
+		project.State = fmt.Sprintf("Error: %v", err)
+		_ = project.Save()
+		return err
 	}
 	domain, delay, err := ParseProjectDomain(project.Domain)
 	if err != nil {
 		return err
 	}
 
-	command := fmt.Sprintf(`docker build -t %s . && exec docker run --rm --sig-proxy=true --name %s -p %d:80 %s %s`, project.DockerImage(), containerName, project.Port, dockerOptions, project.DockerImage())
 	project.State = "awaiting liveness"
 	if domain == "" {
 		project.State = "cleanup"
@@ -217,7 +284,7 @@ func (project *Project) BuildAndRun() error {
 	_, _ = fmt.Fprintf(logFile, "\n--- %s ---\n$ %s\n", time.Now().Format(time.RFC3339), command)
 	cmd := exec.Command("sh", "-c", command)
 	cmd.Dir = releaseDir
-	cmd.Env = append(os.Environ(), fmt.Sprintf("PORT=%d", project.Port))
+	cmd.Env = releaseEnvironment(project.Port)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -231,7 +298,7 @@ func (project *Project) BuildAndRun() error {
 		ProjectName:   project.Name,
 		Number:        releaseNumber,
 		Port:          project.Port,
-		ContainerName: containerName,
+		ID:            releaseID,
 		Cmd:           cmd,
 		Done:          make(chan struct{}),
 		Promote:       make(chan promotionRequest),
