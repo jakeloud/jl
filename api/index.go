@@ -14,6 +14,7 @@ type apiRequest struct {
 	Domain        string                 `json:"domain"`
 	Name          string                 `json:"name"`
 	Repo          string                 `json:"repo"`
+	Release       int                    `json:"release"`
 	DockerOptions string                 `json:"dockerOptions"`
 	Additional    map[string]interface{} `json:"additional"`
 }
@@ -57,6 +58,8 @@ func API(w http.ResponseWriter, r *http.Request) {
 		}
 	case "createAppOp":
 		err = CreateProject(body)
+	case "confirmAppLivenessOp":
+		err = ConfirmProjectLiveness(body)
 	case "deleteAppOp":
 		err = DeleteProject(body)
 	case "clearCacheOp":

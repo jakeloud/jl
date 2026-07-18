@@ -18,9 +18,5 @@ func DeleteProject(params apiRequest) error {
 		return nil
 	}
 
-	if err := project.Stop(); err != nil {
-		return err
-	}
-
-	return project.Remove()
+	return project.Delete()
 }

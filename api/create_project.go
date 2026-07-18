@@ -20,19 +20,8 @@ func CreateProject(params apiRequest) error {
 		return nil
 	}
 
-	conf, err := entities.GetConf()
-	if err != nil {
-		return fmt.Errorf("failed to get config: %v", err)
-	}
-
-	takenPorts := make(map[int]int)
-	for _, p := range conf.Projects {
-		takenPorts[p.Port]++
-	}
-
-	port := 38000
-	for takenPorts[port] > 0 {
-		port++
+	if _, _, err := entities.ParseProjectDomain(params.Domain); err != nil {
+		return fmt.Errorf("invalid project domain: %v", err)
 	}
 
 	dockerOptions := params.DockerOptions
@@ -48,16 +37,11 @@ func CreateProject(params apiRequest) error {
 		Domain:     params.Domain,
 		Repo:       params.Repo,
 		Name:       params.Name,
-		Port:       port,
 		Additional: map[string]interface{}{"dockerOptions": dockerOptions},
 	}
 
-	if err := project.Save(); err != nil {
-		return fmt.Errorf("failed to save project: %v", err)
-	}
-
-	if err := project.Advance(true); err != nil {
-		return fmt.Errorf("failed to advance project: %v", err)
+	if err := project.DeployWithNewPort(); err != nil {
+		return fmt.Errorf("failed to deploy project: %v", err)
 	}
 
 	dt := int(time.Since(startTime).Seconds())
@@ -66,7 +50,7 @@ func CreateProject(params apiRequest) error {
 		return fmt.Errorf("failed to load project state: %v", err)
 	}
 
-	logMessage := fmt.Sprintf("*%s* started\\. _%ds_", project.Name, dt)
+	logMessage := fmt.Sprintf("*%s* deployment started\\. _%ds_", project.Name, dt)
 	if project.IsError() {
 		logMessage = fmt.Sprintf("*%s* Failed to start\\. _%ds_", project.Name, dt)
 	}
