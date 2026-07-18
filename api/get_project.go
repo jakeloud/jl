@@ -3,7 +3,6 @@ package api
 import (
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/jakeloud/jl/entities"
 )
@@ -39,8 +38,19 @@ func GetProject(params apiRequest) (interface{}, error) {
 	currentRelease, err := project.CurrentReleaseNumber()
 	if err == nil {
 		project.Additional["currentRelease"] = currentRelease
-		if deadline, ok := entities.ReleasePromotionDeadline(project.Name, currentRelease); ok {
-			project.Additional["promotionDeadline"] = deadline.Format(time.RFC3339)
+		runtime := entities.ReleaseRuntimeStatus(project.Name, currentRelease)
+		project.Additional["runtime"] = runtime
+		if runtime.PromotionDeadline != "" {
+			project.Additional["promotionDeadline"] = runtime.PromotionDeadline
+		}
+		if runtime.Alive {
+			status := "running"
+			if runtime.Active {
+				status = "active"
+			}
+			project.Additional["ps"] = fmt.Sprintf("%s (pid %d)", status, runtime.PID)
+		} else {
+			project.Additional["ps"] = "not running"
 		}
 		logData, readErr := os.ReadFile(project.ReleaseLogPath(currentRelease))
 		if readErr == nil {
@@ -53,14 +63,6 @@ func GetProject(params apiRequest) (interface{}, error) {
 			project.Additional["logs"] = "No release log available"
 		} else {
 			project.Additional["logs"] = fmt.Sprintf("Failed to read logs: %v", readErr)
-		}
-
-		containerName := project.ReleaseContainerName(currentRelease)
-		out, psErr := entities.ExecWrapped(fmt.Sprintf("docker ps --format json -f name=%s", containerName))
-		if psErr == nil {
-			project.Additional["ps"] = out
-		} else {
-			project.Additional["ps"] = fmt.Sprintf("Failed to get ps: %v", psErr)
 		}
 	} else {
 		project.Additional["logs"] = fmt.Sprintf("Failed to get current release: %v", err)

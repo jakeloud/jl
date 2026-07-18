@@ -380,7 +380,7 @@ func (project *Project) DockerImage() string {
 	return strings.ToLower(project.Name)
 }
 
-func (project *Project) ReleaseContainerName(releaseNumber int) string {
+func (project *Project) ReleaseID(releaseNumber int) string {
 	return fmt.Sprintf("%s-r%d", project.Name, releaseNumber)
 }
 

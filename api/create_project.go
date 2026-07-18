@@ -24,11 +24,14 @@ func CreateProject(params apiRequest) error {
 		return fmt.Errorf("invalid project domain: %v", err)
 	}
 
-	dockerOptions := params.DockerOptions
+	cmd := ""
 	if params.Additional != nil {
-		tmp, exists := params.Additional["dockerOptions"].(string)
-		if exists {
-			dockerOptions = tmp
+		if value, exists := params.Additional["cmd"]; exists {
+			var ok bool
+			cmd, ok = value.(string)
+			if !ok {
+				return fmt.Errorf("additional.cmd must be a string")
+			}
 		}
 	}
 
@@ -37,7 +40,7 @@ func CreateProject(params apiRequest) error {
 		Domain:     params.Domain,
 		Repo:       params.Repo,
 		Name:       params.Name,
-		Additional: map[string]interface{}{"dockerOptions": dockerOptions},
+		Additional: map[string]interface{}{"cmd": cmd},
 	}
 
 	if err := project.DeployWithNewPort(); err != nil {
