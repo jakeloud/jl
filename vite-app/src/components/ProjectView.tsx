@@ -47,7 +47,6 @@ export function ProjectView({ project: initialProject, back, refreshConfig }: Pr
   const [isUpdatingDomain, setIsUpdatingDomain] = useState(false)
   const [showDomainEditor, setShowDomainEditor] = useState(false)
   const initialDomain = parseProjectDomain(initialProject.domain)
-  const [domainEnabled, setDomainEnabled] = useState(initialDomain.enabled)
   const [domainHost, setDomainHost] = useState(initialDomain.host)
   const [timeoutMinutes, setTimeoutMinutes] = useState(initialDomain.timeoutMinutes)
   const { api } = useApi()
@@ -118,13 +117,13 @@ export function ProjectView({ project: initialProject, back, refreshConfig }: Pr
   }
 
   const handleDomainUpdate = async () => {
-    if (domainEnabled && (!isValidProjectHost(domainHost) || timeoutMinutes < 1 || timeoutMinutes > 525600)) {
+    if (!isValidProjectHost(domainHost) || !Number.isInteger(timeoutMinutes) || timeoutMinutes < 1 || timeoutMinutes > 525600) {
       toast.error("Enter a valid domain and timeout")
       return
     }
     setIsUpdatingDomain(true)
     try {
-      const nextDomain = formatProjectDomain(domainEnabled, domainHost, timeoutMinutes)
+      const nextDomain = formatProjectDomain(true, domainHost, timeoutMinutes)
       await redeploy(nextDomain)
       setShowDomainEditor(false)
       toast.success("Domain update initiated")
@@ -168,7 +167,6 @@ export function ProjectView({ project: initialProject, back, refreshConfig }: Pr
 
   const openDomainEditor = () => {
     const value = parseProjectDomain(project.domain)
-    setDomainEnabled(value.enabled)
     setDomainHost(value.host)
     setTimeoutMinutes(value.timeoutMinutes)
     setShowDomainEditor(true)
@@ -202,16 +200,8 @@ export function ProjectView({ project: initialProject, back, refreshConfig }: Pr
                   <Button variant="ghost" size="icon" className="size-7" onClick={openDomainEditor}><Settings2 className="size-4" /></Button>
                   {showDomainEditor && (
                     <div className="absolute left-0 top-9 z-20 w-80 space-y-3 rounded-md border bg-popover p-4 text-popover-foreground shadow-md">
-                      <label className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={domainEnabled} onChange={(event) => setDomainEnabled(event.target.checked)} className="size-4" />
-                        Enable domain and proxy
-                      </label>
-                      {domainEnabled && (
-                        <>
-                          <div className="space-y-1"><Label>Domain</Label><Input value={domainHost} onChange={(event) => setDomainHost(event.target.value)} /></div>
-                          <div className="space-y-1"><Label>Timeout in minutes</Label><Input type="number" min={1} max={525600} value={timeoutMinutes} onChange={(event) => setTimeoutMinutes(event.target.valueAsNumber)} /></div>
-                        </>
-                      )}
+                      <div className="space-y-1"><Label>Domain</Label><Input value={domainHost} onChange={(event) => setDomainHost(event.target.value)} /></div>
+                      <div className="space-y-1"><Label>Timeout in minutes</Label><Input type="number" min={1} max={525600} step={1} value={timeoutMinutes} onChange={(event) => setTimeoutMinutes(event.target.valueAsNumber)} /></div>
                       <div className="flex justify-end gap-2">
                         <Button size="sm" variant="outline" onClick={() => setShowDomainEditor(false)}>Cancel</Button>
                         <Button size="sm" onClick={handleDomainUpdate} disabled={isUpdatingDomain}>{isUpdatingDomain ? "Saving..." : "Save and redeploy"}</Button>
