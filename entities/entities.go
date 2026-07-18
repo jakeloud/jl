@@ -17,6 +17,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"syscall"
+	"time"
 
 	"github.com/jakeloud/jl/ip_getter"
 	"golang.org/x/crypto/pbkdf2"
@@ -34,6 +37,38 @@ var SSH_KEY_PUB = PROJECTS_ROOT + "/id_rsa.pub"
 
 var dry bool = false
 var dry_conf []byte = []byte("{\"apps\":[{\"name\":\"jakeloud\",\"port\":666}],\"users\":[]}")
+
+type Release struct {
+	ProjectName   string
+	Number        int
+	ContainerName string
+	Cmd           *exec.Cmd
+	Done          chan struct{}
+	stopRequested atomic.Bool
+}
+
+var (
+	releasesMu             sync.RWMutex
+	releases               = make(map[string]*Release)
+	shuttingDown           atomic.Bool
+	notifierMu             sync.RWMutex
+	releaseFailureNotifier func(string) error
+)
+
+func SetReleaseFailureNotifier(notifier func(string) error) {
+	notifierMu.Lock()
+	releaseFailureNotifier = notifier
+	notifierMu.Unlock()
+}
+
+func notifyReleaseFailure(message string) {
+	notifierMu.RLock()
+	notifier := releaseFailureNotifier
+	notifierMu.RUnlock()
+	if notifier != nil {
+		_ = notifier(message)
+	}
+}
 
 func SetDry(d bool) {
 	dry = d
@@ -110,6 +145,100 @@ func ExecWrapped(cmd string) (string, error) {
 		return string(output), err
 	}
 	return string(output), nil
+}
+
+func (project *Project) ReleaseLogPath(releaseNumber int) string {
+	return filepath.Join(project.ProjectDir(), fmt.Sprintf("r%d.log", releaseNumber))
+}
+
+func (project *Project) runReleaseCommand(releaseNumber int, command string) (string, error) {
+	if dry {
+		slog.Info("Executing", "cmd", command)
+		return "", nil
+	}
+
+	if err := os.MkdirAll(project.ProjectDir(), 0755); err != nil {
+		return "", err
+	}
+	logFile, err := os.OpenFile(project.ReleaseLogPath(releaseNumber), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return "", err
+	}
+	defer logFile.Close()
+
+	_, _ = fmt.Fprintf(logFile, "\n--- %s ---\n$ %s\n", time.Now().Format(time.RFC3339), command)
+	output, err := exec.Command("sh", "-c", command).CombinedOutput()
+	if _, writeErr := logFile.Write(output); writeErr != nil && err == nil {
+		err = writeErr
+	}
+	return string(output), err
+}
+
+func registerRelease(release *Release) {
+	releasesMu.Lock()
+	releases[release.ContainerName] = release
+	releasesMu.Unlock()
+}
+
+func unregisterRelease(release *Release) {
+	releasesMu.Lock()
+	if current, ok := releases[release.ContainerName]; ok && current == release {
+		delete(releases, release.ContainerName)
+	}
+	releasesMu.Unlock()
+}
+
+func projectReleases(projectName string, includeCurrent bool, current int) []*Release {
+	releasesMu.RLock()
+	defer releasesMu.RUnlock()
+	result := make([]*Release, 0)
+	for _, release := range releases {
+		if (projectName == "" || release.ProjectName == projectName) && (includeCurrent || release.Number != current) {
+			result = append(result, release)
+		}
+	}
+	return result
+}
+
+func requestReleaseStop(release *Release) {
+	if release.stopRequested.CompareAndSwap(false, true) && release.Cmd.Process != nil {
+		if err := release.Cmd.Process.Signal(syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			slog.Info("Failed to signal release", "container", release.ContainerName, "err", err)
+		}
+	}
+}
+
+func waitForReleases(releaseList []*Release, timeout time.Duration) bool {
+	if len(releaseList) == 0 {
+		return true
+	}
+
+	done := make(chan struct{})
+	go func() {
+		for _, release := range releaseList {
+			<-release.Done
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
+}
+
+func shutdownReleaseList(releaseList []*Release, timeout time.Duration) bool {
+	for _, release := range releaseList {
+		requestReleaseStop(release)
+	}
+	return waitForReleases(releaseList, timeout)
+}
+
+func ShutdownReleases(timeout time.Duration) bool {
+	shuttingDown.Store(true)
+	return shutdownReleaseList(projectReleases("", true, 0), timeout)
 }
 
 func ClearCache() (string, error) {
@@ -202,7 +331,24 @@ func Start(server interface{}) error {
 		return err
 	}
 
+	go redeployProjects()
 	return nil
+}
+
+func redeployProjects() {
+	conf, err := GetConf()
+	if err != nil {
+		slog.Info("Failed to load projects for startup redeploy", "err", err)
+		return
+	}
+	for _, project := range conf.Projects {
+		if project.Name == JAKELOUD {
+			continue
+		}
+		if err := project.Advance(true); err != nil {
+			slog.Info("Startup redeploy failed", "project", project.Name, "err", err)
+		}
+	}
 }
 
 func (project *Project) Save() error {
@@ -412,14 +558,18 @@ func (project *Project) Clone() error {
 		return project.Save()
 	}
 
+	releaseNumberValue, ok := releaseNumber(filepath.Base(releaseDir))
+	if !ok {
+		return fmt.Errorf("invalid release directory: %s", releaseDir)
+	}
 	cmd := fmt.Sprintf(`eval "$(ssh-agent -s)"; ssh-add %s; git clone --depth 1 %s %s; kill $SSH_AGENT_PID`, SSH_KEY, project.Repo, releaseDir)
-	_, err = ExecWrapped(cmd)
+	out, err := project.runReleaseCommand(releaseNumberValue, cmd)
 	if err != nil {
 		if LOG_MUTEX {
 			slog.Info("Lock", "project", project.Name)
 		}
 		project.mu.Lock()
-		project.State = fmt.Sprintf("Error: %v", err)
+		project.State = fmt.Sprintf("Error: %v\n%s", err, out)
 		project.mu.Unlock()
 		if LOG_MUTEX {
 			slog.Info("Unlock", "project", project.Name)
@@ -455,7 +605,11 @@ func (project *Project) Build() error {
 	}
 
 	cmd := fmt.Sprintf(`docker build -t %s %s`, project.DockerImage(), releaseDir)
-	out, err := ExecWrapped(cmd)
+	releaseNumber, err := project.CurrentReleaseNumber()
+	if err != nil {
+		return err
+	}
+	out, err := project.runReleaseCommand(releaseNumber, cmd)
 	if err != nil {
 		if LOG_MUTEX {
 			slog.Info("Lock", "project", project.Name)
@@ -604,25 +758,71 @@ func (project *Project) Start() error {
 	}
 
 	dockerOptions := ""
-	if opts, ok := project.Additional["dockerOptions"]; ok {
-		dockerOptions = opts.(string)
+	if opts, ok := project.Additional["dockerOptions"].(string); ok {
+		dockerOptions = opts
 	}
 
-	cmd := fmt.Sprintf(`docker run --name %s -d -p %d:80 %s %s`, containerName, project.Port, dockerOptions, project.DockerImage())
-	out, err := ExecWrapped(cmd)
+	releaseNumber, err := project.CurrentReleaseNumber()
 	if err != nil {
+		return err
+	}
+	logFile, err := os.OpenFile(project.ReleaseLogPath(releaseNumber), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(logFile, "\n--- %s ---\n$ docker run --rm --sig-proxy=true --name %s -p %d:80 %s %s\n", time.Now().Format(time.RFC3339), containerName, project.Port, dockerOptions, project.DockerImage())
+	cmd := exec.Command("sh", "-c", fmt.Sprintf(`exec docker run --rm --sig-proxy=true --name %s -p %d:80 %s %s`, containerName, project.Port, dockerOptions, project.DockerImage()))
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	if err := cmd.Start(); err != nil {
+		logFile.Close()
 		if LOG_MUTEX {
 			slog.Info("Lock", "project", project.Name)
 		}
 		project.mu.Lock()
-		project.State = fmt.Sprintf("Error: %v\n%s", err, out)
+		project.State = fmt.Sprintf("Error: %v", err)
 		project.mu.Unlock()
 		if LOG_MUTEX {
 			slog.Info("Unlock", "project", project.Name)
 		}
 		return project.Save()
 	}
+
+	release := &Release{
+		ProjectName:   project.Name,
+		Number:        releaseNumber,
+		ContainerName: containerName,
+		Cmd:           cmd,
+		Done:          make(chan struct{}),
+	}
+	registerRelease(release)
+	go waitForRelease(release, logFile)
 	return nil
+}
+
+func waitForRelease(release *Release, logFile *os.File) {
+	err := release.Cmd.Wait()
+	_ = logFile.Close()
+	unregisterRelease(release)
+	close(release.Done)
+
+	if err == nil || release.stopRequested.Load() || shuttingDown.Load() {
+		return
+	}
+
+	project, getErr := GetProject(release.ProjectName)
+	if getErr != nil {
+		return
+	}
+	current, currentErr := project.CurrentReleaseNumber()
+	if currentErr != nil || current != release.Number {
+		return
+	}
+	project.State = fmt.Sprintf("Error: release r%d exited: %v", release.Number, err)
+	if saveErr := project.Save(); saveErr != nil {
+		slog.Info("Failed to save release failure", "project", release.ProjectName, "err", saveErr)
+	}
+	notifyReleaseFailure(fmt.Sprintf("*%s* release r%d failed: %v", release.ProjectName, release.Number, err))
 }
 
 func (project *Project) Cert() error {
@@ -700,24 +900,19 @@ func (project *Project) Cleanup() error {
 		return nil
 	}
 
-	currentContainer, err := project.CurrentContainerName()
+	current, err := project.CurrentReleaseNumber()
 	if err != nil {
 		return err
 	}
-
-	cmd := fmt.Sprintf(`for container in $(docker ps -a --format '{{.Names}}' --filter name=^/%s-r); do if [ "$container" != "%s" ]; then docker stop "$container" || true; docker rm "$container" || true; fi; done`, project.Name, currentContainer)
-	out, err := ExecWrapped(cmd)
-	if err != nil {
-		if LOG_MUTEX {
-			slog.Info("Lock", "project", project.Name)
+	oldReleases := projectReleases(project.Name, false, current)
+	if !shutdownReleaseList(oldReleases, 5*time.Second) {
+		err := fmt.Errorf("timed out waiting for previous releases to stop")
+		project.State = fmt.Sprintf("Error: %v", err)
+		if saveErr := project.Save(); saveErr != nil {
+			return saveErr
 		}
-		project.mu.Lock()
-		project.State = fmt.Sprintf("Error: %v\n%s", err, out)
-		project.mu.Unlock()
-		if LOG_MUTEX {
-			slog.Info("Unlock", "project", project.Name)
-		}
-		return project.Save()
+		notifyReleaseFailure(fmt.Sprintf("*%s* cleanup failed: %v", project.Name, err))
+		return err
 	}
 
 	if LOG_MUTEX {
@@ -746,23 +941,11 @@ func (project *Project) Stop() error {
 		return err
 	}
 
-	containerName, err := project.CurrentContainerName()
-	if err != nil {
+	if _, err := project.CurrentReleaseNumber(); err != nil {
 		return err
 	}
-
-	out, err := ExecWrapped(fmt.Sprintf(`docker stop %s`, containerName))
-	if err != nil {
-		if LOG_MUTEX {
-			slog.Info("Lock", "project", project.Name)
-		}
-		project.mu.Lock()
-		project.State = fmt.Sprintf("Error: %v\n%s", err, out)
-		project.mu.Unlock()
-		if LOG_MUTEX {
-			slog.Info("Unlock", "project", project.Name)
-		}
-		return project.Save()
+	if !shutdownReleaseList(projectReleases(project.Name, true, 0), 5*time.Second) {
+		return fmt.Errorf("timed out waiting for project release to stop")
 	}
 	return nil
 }
@@ -787,8 +970,18 @@ func (project *Project) Remove() error {
 		return err
 	}
 
+	allReleases := projectReleases(project.Name, true, 0)
+	if !shutdownReleaseList(allReleases, 5*time.Second) {
+		err := fmt.Errorf("timed out waiting for project releases to stop")
+		project.State = fmt.Sprintf("Error: %v", err)
+		if saveErr := project.Save(); saveErr != nil {
+			return saveErr
+		}
+		notifyReleaseFailure(fmt.Sprintf("*%s* removal failed: %v", project.Name, err))
+		return err
+	}
+
 	cmds := []string{
-		fmt.Sprintf(`for container in $(docker ps -a --format '{{.Names}}' --filter name=^/%s-r); do docker stop "$container" || true; docker rm "$container" || true; done`, project.Name),
 		fmt.Sprintf(`rm -f /etc/nginx/sites-available/%s`, project.Name),
 		fmt.Sprintf(`rm -f /etc/nginx/sites-enabled/%s`, project.Name),
 		fmt.Sprintf(`rm -rf %s`, project.ProjectDir()),
