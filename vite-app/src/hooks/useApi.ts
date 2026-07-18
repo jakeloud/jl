@@ -1,9 +1,9 @@
 "use client"
 
 import { useAuth } from "./useAuth"
-import type { FormData, App } from "../types"
+import type { FormData, Project } from "../types"
 
-type T = App | FormData
+type T = Project | FormData
 export function useApi() {
   const { getLoginData } = useAuth()
 

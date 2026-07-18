@@ -49,7 +49,7 @@ export function CreateDBForm({ onSuccess, onCancel }: CreateDBFormProps) {
 
   return (
     <div className="space-y-4 p-4 border rounded-lg">
-      <h2 className="text-lg font-semibold">Create New App</h2>
+      <h2 className="text-lg font-semibold">Create Database Connection</h2>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <FormField

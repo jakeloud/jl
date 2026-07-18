@@ -5,22 +5,21 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { toast } from 'sonner'
-import { Toaster } from "@/components/ui/sonner"
 import { LoginForm } from "@/components/LoginForm"
 import { RegisterForm } from "@/components/RegisterForm"
-import { AppsTab } from "@/components/AppsTab"
-import { AppView } from "@/components/AppView"
+import { ProjectsTab } from "@/components/ProjectsTab"
+import { ProjectView } from "@/components/ProjectView"
 import { DBView } from "@/components/DBView"
 import { SettingsTab } from "@/components/SettingsTab"
 import { DBsTab } from "@/components/DBsTab"
 import { useAuth } from "@/hooks/useAuth"
 import { useApi } from "@/hooks/useApi"
-import { AppConfig } from "@/types"
+import { JakeLoudConfig } from "@/types"
 
 function App() {
-  const [config, setConfig] = useState<AppConfig | null>(null)
-  const [activeTab, setActiveTab] = useState<string>("apps")
-  const [selectedApp, setSelectedApp] = useState('')
+  const [config, setConfig] = useState<JakeLoudConfig | null>(null)
+  const [activeTab, setActiveTab] = useState<string>("projects")
+  const [selectedProject, setSelectedProject] = useState('')
   const [selectedDB, setSelectedDB] = useState('')
   const { isAuthenticated, logout } = useAuth()
   const { api } = useApi()
@@ -61,13 +60,13 @@ function App() {
     )
   }
 
-  const app = config?.apps?.find(a => a.name == selectedApp)
-  if (app != undefined) {
+  const project = config?.apps?.find(project => project.name == selectedProject)
+  if (project != undefined) {
     return (
-      <AppView
-        app={app}
+      <ProjectView
+        project={project}
         refreshConfig={getConfig}
-        back={() => setSelectedApp('')}
+        back={() => setSelectedProject('')}
       />
     )
   }
@@ -94,7 +93,7 @@ function App() {
           <div className="flex justify-center">
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList>
-                <TabsTrigger value="apps">Apps</TabsTrigger>
+                <TabsTrigger value="projects">Projects</TabsTrigger>
                 <TabsTrigger value="settings">Settings</TabsTrigger>
                 <TabsTrigger value="dbs">DBs</TabsTrigger>
               </TabsList>
@@ -110,17 +109,16 @@ function App() {
       </header>
 
       <main>
-        {activeTab === "apps" && (
-          <AppsTab
-            apps={config.apps}
+        {activeTab === "projects" && (
+          <ProjectsTab
+            projects={config.apps}
             refreshConfig={getConfig}
-            setSelectedApp={setSelectedApp}
+            setSelectedProject={setSelectedProject}
           />
         )}
         {activeTab === "settings" && <SettingsTab apps={config.apps} refreshConfig={getConfig} />}
         {activeTab === "dbs" && <DBsTab dbs={config.dbs || []} refreshConfig={getConfig} setSelectedDB={setSelectedDB} />}
       </main>
-      <Toaster />
     </div>
   )
 }

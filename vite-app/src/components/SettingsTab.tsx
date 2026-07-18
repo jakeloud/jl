@@ -9,7 +9,7 @@ import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { ExternalLink, Copy, RefreshCw } from "lucide-react"
-import { App } from "../types"
+import { Project } from "../types"
 import { useApi } from "../hooks/useApi"
 import { toast } from "sonner"
 
@@ -17,12 +17,12 @@ const domainFormSchema = z.object({
   domain: z.string().min(3, { message: "Domain must be at least 3 characters" }),
 })
 interface ChangeDomainProps {
-  jakeloudApp: App
+  jakeloudApp: Project
 }
 function ChangeDomain({ jakeloudApp }: ChangeDomainProps) {
   const [isLoading, setIsLoading] = useState(false)
   const { api } = useApi()
-  const initialDomain = jakeloudApp.domain
+  const initialDomain = jakeloudApp.domain || ""
 
   const form = useForm<z.infer<typeof domainFormSchema>>({
     resolver: zodResolver(domainFormSchema),
@@ -140,7 +140,7 @@ const telegramFormSchema = z.object({
   botToken: z.string().min(1, { message: "Bot Token is required" }),
 })
 interface TelegramIntegrationProps {
-  jakeloudApp: App,
+  jakeloudApp: Project,
   refreshConfig: () => void
 }
 function TelegramIntegration({jakeloudApp, refreshConfig}: TelegramIntegrationProps) {
@@ -277,7 +277,7 @@ function DockerCache({refreshConfig}: DockerCacheProps) {
 }
 
 interface SettingsTabProps {
-  apps?: App[]
+  apps?: Project[]
   refreshConfig: () => void
 }
 export function SettingsTab({ apps = [], refreshConfig }: SettingsTabProps) {
