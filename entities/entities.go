@@ -594,7 +594,14 @@ func (project *Project) Proxy() error {
 	if err := project.Save(); err != nil {
 		return err
 	}
+	if err := project.configureProxy(domain, project.Port); err != nil {
+		project.State = fmt.Sprintf("Error: %v", err)
+		return project.Save()
+	}
+	return nil
+}
 
+func (project *Project) configureProxy(domain string, port int) error {
 	content := fmt.Sprintf(`
 server {
 	listen 80;
@@ -610,7 +617,7 @@ server {
 		proxy_set_header Upgrade $http_upgrade;
 		proxy_set_header Connection "upgrade";
 	}
-}`, domain, project.Port)
+}`, domain, port)
 
 	file := "default"
 	if project.Name != JAKELOUD {
@@ -627,16 +634,7 @@ server {
 	}
 
 	if out, err := ExecWrapped("nginx -t"); err != nil {
-		if LOG_MUTEX {
-			slog.Info("Lock", "project", project.Name)
-		}
-		project.mu.Lock()
-		project.State = fmt.Sprintf("Error: %v\n%s", err, out)
-		project.mu.Unlock()
-		if LOG_MUTEX {
-			slog.Info("Unlock", "project", project.Name)
-		}
-		return project.Save()
+		return fmt.Errorf("nginx config test failed: %w\n%s", err, out)
 	}
 
 	enabledPath := fmt.Sprintf("/etc/nginx/sites-enabled/%s", file)
@@ -651,16 +649,7 @@ server {
 	}
 
 	if out, err := ExecWrapped("service nginx restart"); err != nil {
-		if LOG_MUTEX {
-			slog.Info("Lock", "project", project.Name)
-		}
-		project.mu.Lock()
-		project.State = fmt.Sprintf("Error: %v\n%s", err, out)
-		project.mu.Unlock()
-		if LOG_MUTEX {
-			slog.Info("Unlock", "project", project.Name)
-		}
-		return project.Save()
+		return fmt.Errorf("nginx restart failed: %w\n%s", err, out)
 	}
 	return nil
 }

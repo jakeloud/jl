@@ -347,27 +347,51 @@ func promoteRelease(release *Release) error {
 		return err
 	}
 	if err := project.Proxy(); err != nil {
-		return savePromotionError(&project, release.Number, err)
+		return rollbackPromotion(&project, release, err)
 	}
 	if !release.alive.Load() {
-		return savePromotionError(&project, release.Number, errors.New("release exited during proxy setup"))
+		return rollbackPromotion(&project, release, errors.New("release exited during proxy setup"))
 	}
 	if project.IsError() {
-		return errors.New(project.State)
+		return rollbackPromotion(&project, release, errors.New(project.State))
 	}
 	if err := project.Cert(); err != nil {
-		return savePromotionError(&project, release.Number, err)
+		return rollbackPromotion(&project, release, err)
 	}
 	if !release.alive.Load() {
-		return savePromotionError(&project, release.Number, errors.New("release exited during certificate setup"))
+		return rollbackPromotion(&project, release, errors.New("release exited during certificate setup"))
 	}
 	if project.IsError() {
-		return errors.New(project.State)
+		return rollbackPromotion(&project, release, errors.New(project.State))
 	}
 	if err := project.Cleanup(); err != nil {
 		return savePromotionError(&project, release.Number, err)
 	}
 	return nil
+}
+
+func rollbackPromotion(project *Project, release *Release, err error) error {
+	if rollbackErr := restorePreviousProxy(project, release.Number); rollbackErr != nil {
+		err = fmt.Errorf("%v; proxy rollback failed: %w", err, rollbackErr)
+	}
+	return savePromotionError(project, release.Number, err)
+}
+
+func restorePreviousProxy(project *Project, currentRelease int) error {
+	domain, _, err := ParseProjectDomain(project.Domain)
+	if err != nil || domain == "" {
+		return err
+	}
+	var previous *Release
+	for _, release := range projectReleases(project.Name, false, currentRelease) {
+		if release.alive.Load() && !release.stopRequested.Load() && (previous == nil || release.Number > previous.Number) {
+			previous = release
+		}
+	}
+	if previous == nil {
+		return nil
+	}
+	return project.configureProxy(domain, previous.Port)
 }
 
 func savePromotionError(project *Project, releaseNumber int, err error) error {
