@@ -346,20 +346,36 @@ func promoteRelease(release *Release) error {
 	if err := project.Save(); err != nil {
 		return err
 	}
-	if err := project.advance(false); err != nil {
-		project.State = fmt.Sprintf("Error: failed to promote release r%d: %v", release.Number, err)
-		if saveErr := project.Save(); saveErr != nil {
-			slog.Info("Failed to save promotion failure", "project", project.Name, "err", saveErr)
-		}
-		return err
+	if err := project.Proxy(); err != nil {
+		return savePromotionError(&project, release.Number, err)
 	}
-	if err := project.LoadState(); err != nil {
-		return err
+	if !release.alive.Load() {
+		return savePromotionError(&project, release.Number, errors.New("release exited during proxy setup"))
 	}
 	if project.IsError() {
 		return errors.New(project.State)
 	}
+	if err := project.Cert(); err != nil {
+		return savePromotionError(&project, release.Number, err)
+	}
+	if !release.alive.Load() {
+		return savePromotionError(&project, release.Number, errors.New("release exited during certificate setup"))
+	}
+	if project.IsError() {
+		return errors.New(project.State)
+	}
+	if err := project.Cleanup(); err != nil {
+		return savePromotionError(&project, release.Number, err)
+	}
 	return nil
+}
+
+func savePromotionError(project *Project, releaseNumber int, err error) error {
+	project.State = fmt.Sprintf("Error: failed to promote release r%d: %v", releaseNumber, err)
+	if saveErr := project.Save(); saveErr != nil {
+		slog.Info("Failed to save promotion failure", "project", project.Name, "err", saveErr)
+	}
+	return err
 }
 
 func ConfirmRelease(projectName string, releaseNumber int) error {
