@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -648,6 +649,37 @@ server {
 		}
 	}
 
+	if out, err := ExecWrapped("service nginx restart"); err != nil {
+		return fmt.Errorf("nginx restart failed: %w\n%s", err, out)
+	}
+	return nil
+}
+
+func (project *Project) retargetProxy(port int) error {
+	file := project.Name
+	if project.Name == JAKELOUD {
+		file = "default"
+	}
+	filePath := fmt.Sprintf("/etc/nginx/sites-available/%s", file)
+	if dry {
+		slog.Info("Retargeting proxy", "file", filePath, "port", port)
+	} else {
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			return err
+		}
+		proxyPass := regexp.MustCompile(`proxy_pass\s+http://127\.0\.0\.1:\d+;`)
+		if !proxyPass.Match(content) {
+			return errors.New("proxy_pass not found in nginx config")
+		}
+		content = proxyPass.ReplaceAll(content, []byte(fmt.Sprintf("proxy_pass         http://127.0.0.1:%d;", port)))
+		if err := os.WriteFile(filePath, content, 0644); err != nil {
+			return err
+		}
+	}
+	if out, err := ExecWrapped("nginx -t"); err != nil {
+		return fmt.Errorf("nginx config test failed: %w\n%s", err, out)
+	}
 	if out, err := ExecWrapped("service nginx restart"); err != nil {
 		return fmt.Errorf("nginx restart failed: %w\n%s", err, out)
 	}

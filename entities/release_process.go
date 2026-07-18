@@ -23,6 +23,7 @@ type Release struct {
 	PromotionDone chan struct{}
 	PromoteAt     time.Time
 	alive         atomic.Bool
+	active        atomic.Bool
 	stopRequested atomic.Bool
 }
 
@@ -129,6 +130,7 @@ func waitForReleases(releaseList []*Release, timeout time.Duration) bool {
 	go func() {
 		for _, release := range releaseList {
 			<-release.Done
+			<-release.PromotionDone
 		}
 		close(done)
 	}()
@@ -244,7 +246,11 @@ func (project *Project) BuildAndRun() error {
 
 	if domain == "" {
 		close(release.PromotionDone)
-		return project.advance(false)
+		if err := project.advance(false); err != nil {
+			return err
+		}
+		release.active.Store(true)
+		return nil
 	}
 
 	go coordinateReleasePromotion(release, delay)
@@ -367,6 +373,7 @@ func promoteRelease(release *Release) error {
 	if err := project.Cleanup(); err != nil {
 		return savePromotionError(&project, release.Number, err)
 	}
+	release.active.Store(true)
 	return nil
 }
 
@@ -384,14 +391,14 @@ func restorePreviousProxy(project *Project, currentRelease int) error {
 	}
 	var previous *Release
 	for _, release := range projectReleases(project.Name, false, currentRelease) {
-		if release.alive.Load() && !release.stopRequested.Load() && (previous == nil || release.Number > previous.Number) {
+		if release.active.Load() && release.alive.Load() && !release.stopRequested.Load() && (previous == nil || release.Number > previous.Number) {
 			previous = release
 		}
 	}
 	if previous == nil {
 		return nil
 	}
-	return project.configureProxy(domain, previous.Port)
+	return project.retargetProxy(previous.Port)
 }
 
 func savePromotionError(project *Project, releaseNumber int, err error) error {
