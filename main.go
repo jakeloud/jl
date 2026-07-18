@@ -31,7 +31,6 @@ func main() {
 	if err := server.Start(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
-	defer entities.ShutdownReleases(5 * time.Second)
 	log.Println("Started server")
 
 	httpServer := &http.Server{Addr: ":666"}
@@ -49,17 +48,19 @@ func main() {
 		if err != http.ErrServerClosed {
 			log.Printf("Server failed: %v", err)
 		}
+		entities.BeginShutdown()
 		if !entities.ShutdownReleases(5 * time.Second) {
 			log.Println("Timed out waiting for releases to stop")
 		}
 	case <-signals:
-		if !entities.ShutdownReleases(5 * time.Second) {
-			log.Println("Timed out waiting for releases to stop")
-		}
+		entities.BeginShutdown()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		if err := httpServer.Shutdown(ctx); err != nil {
 			log.Printf("Server shutdown failed: %v", err)
 		}
 		cancel()
+		if !entities.ShutdownReleases(5 * time.Second) {
+			log.Println("Timed out waiting for releases to stop")
+		}
 	}
 }

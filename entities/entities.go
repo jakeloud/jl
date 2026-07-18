@@ -13,12 +13,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/jakeloud/jl/ip_getter"
@@ -38,37 +37,11 @@ var SSH_KEY_PUB = PROJECTS_ROOT + "/id_rsa.pub"
 var dry bool = false
 var dry_conf []byte = []byte("{\"apps\":[{\"name\":\"jakeloud\",\"port\":666}],\"users\":[]}")
 
-type Release struct {
-	ProjectName   string
-	Number        int
-	ContainerName string
-	Cmd           *exec.Cmd
-	Done          chan struct{}
-	stopRequested atomic.Bool
-}
-
 var (
-	releasesMu             sync.RWMutex
-	releases               = make(map[string]*Release)
-	shuttingDown           atomic.Bool
-	notifierMu             sync.RWMutex
-	releaseFailureNotifier func(string) error
+	confMu         sync.Mutex
+	projectLocksMu sync.Mutex
+	projectLocks   = make(map[string]*sync.Mutex)
 )
-
-func SetReleaseFailureNotifier(notifier func(string) error) {
-	notifierMu.Lock()
-	releaseFailureNotifier = notifier
-	notifierMu.Unlock()
-}
-
-func notifyReleaseFailure(message string) {
-	notifierMu.RLock()
-	notifier := releaseFailureNotifier
-	notifierMu.RUnlock()
-	if notifier != nil {
-		_ = notifier(message)
-	}
-}
 
 func SetDry(d bool) {
 	dry = d
@@ -97,6 +70,12 @@ type User struct {
 }
 
 func SetConf(conf Config) error {
+	confMu.Lock()
+	defer confMu.Unlock()
+	return setConf(conf)
+}
+
+func setConf(conf Config) error {
 	data, err := json.MarshalIndent(conf, "", "  ")
 	if err != nil {
 		return err
@@ -107,10 +86,37 @@ func SetConf(conf Config) error {
 		return nil
 	}
 
-	return ioutil.WriteFile(CONF_FILE, data, 0644)
+	temp, err := os.CreateTemp(filepath.Dir(CONF_FILE), ".conf-*")
+	if err != nil {
+		return err
+	}
+	tempName := temp.Name()
+	defer os.Remove(tempName)
+	if err := temp.Chmod(0644); err != nil {
+		temp.Close()
+		return err
+	}
+	if _, err := temp.Write(data); err != nil {
+		temp.Close()
+		return err
+	}
+	if err := temp.Sync(); err != nil {
+		temp.Close()
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tempName, CONF_FILE)
 }
 
 func GetConf() (Config, error) {
+	confMu.Lock()
+	defer confMu.Unlock()
+	return getConf()
+}
+
+func getConf() (Config, error) {
 	var conf Config
 	if dry {
 		if err := json.Unmarshal(dry_conf, &conf); err != nil {
@@ -132,6 +138,17 @@ func GetConf() (Config, error) {
 		return conf, err
 	}
 	return conf, nil
+}
+
+func projectLock(name string) *sync.Mutex {
+	projectLocksMu.Lock()
+	defer projectLocksMu.Unlock()
+	lock, ok := projectLocks[name]
+	if !ok {
+		lock = &sync.Mutex{}
+		projectLocks[name] = lock
+	}
+	return lock
 }
 
 func ExecWrapped(cmd string) (string, error) {
@@ -172,73 +189,6 @@ func (project *Project) runReleaseCommand(releaseNumber int, command string) (st
 		err = writeErr
 	}
 	return string(output), err
-}
-
-func registerRelease(release *Release) {
-	releasesMu.Lock()
-	releases[release.ContainerName] = release
-	releasesMu.Unlock()
-}
-
-func unregisterRelease(release *Release) {
-	releasesMu.Lock()
-	if current, ok := releases[release.ContainerName]; ok && current == release {
-		delete(releases, release.ContainerName)
-	}
-	releasesMu.Unlock()
-}
-
-func projectReleases(projectName string, includeCurrent bool, current int) []*Release {
-	releasesMu.RLock()
-	defer releasesMu.RUnlock()
-	result := make([]*Release, 0)
-	for _, release := range releases {
-		if (projectName == "" || release.ProjectName == projectName) && (includeCurrent || release.Number != current) {
-			result = append(result, release)
-		}
-	}
-	return result
-}
-
-func requestReleaseStop(release *Release) {
-	if release.stopRequested.CompareAndSwap(false, true) && release.Cmd.Process != nil {
-		if err := release.Cmd.Process.Signal(syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
-			slog.Info("Failed to signal release", "container", release.ContainerName, "err", err)
-		}
-	}
-}
-
-func waitForReleases(releaseList []*Release, timeout time.Duration) bool {
-	if len(releaseList) == 0 {
-		return true
-	}
-
-	done := make(chan struct{})
-	go func() {
-		for _, release := range releaseList {
-			<-release.Done
-		}
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		return true
-	case <-time.After(timeout):
-		return false
-	}
-}
-
-func shutdownReleaseList(releaseList []*Release, timeout time.Duration) bool {
-	for _, release := range releaseList {
-		requestReleaseStop(release)
-	}
-	return waitForReleases(releaseList, timeout)
-}
-
-func ShutdownReleases(timeout time.Duration) bool {
-	shuttingDown.Store(true)
-	return shutdownReleaseList(projectReleases("", true, 0), timeout)
 }
 
 func ClearCache() (string, error) {
@@ -361,7 +311,9 @@ func (project *Project) Save() error {
 		slog.Info("Unlock", "project", project.Name)
 	}
 
-	conf, err := GetConf()
+	confMu.Lock()
+	defer confMu.Unlock()
+	conf, err := getConf()
 	if err != nil {
 		return err
 	}
@@ -380,7 +332,44 @@ func (project *Project) Save() error {
 		conf.Projects[projectIndex] = *project
 	}
 
-	return SetConf(conf)
+	return setConf(conf)
+}
+
+func (project *Project) DeployWithNewPort() error {
+	lock := projectLock(project.Name)
+	lock.Lock()
+	defer lock.Unlock()
+
+	confMu.Lock()
+	conf, err := getConf()
+	if err == nil {
+		takenPorts := reservedReleasePorts()
+		for _, configuredProject := range conf.Projects {
+			takenPorts[configuredProject.Port] = true
+		}
+		project.Port = 38000
+		for takenPorts[project.Port] {
+			project.Port++
+		}
+		projectIndex := -1
+		for i, configuredProject := range conf.Projects {
+			if configuredProject.Name == project.Name {
+				projectIndex = i
+				break
+			}
+		}
+		if projectIndex < 0 {
+			conf.Projects = append(conf.Projects, *project)
+		} else {
+			conf.Projects[projectIndex] = *project
+		}
+		err = setConf(conf)
+	}
+	confMu.Unlock()
+	if err != nil {
+		return err
+	}
+	return project.advance(true)
 }
 
 func (project *Project) ProjectDir() string {
@@ -441,14 +430,6 @@ func (project *Project) CurrentReleaseDir() (string, error) {
 func (project *Project) CurrentReleaseNumber() (int, error) {
 	current, _, err := project.CurrentRelease()
 	return current, err
-}
-
-func (project *Project) CurrentContainerName() (string, error) {
-	current, err := project.CurrentReleaseNumber()
-	if err != nil {
-		return "", err
-	}
-	return project.ReleaseContainerName(current), nil
 }
 
 func (project *Project) CurrentRelease() (int, map[int]string, error) {
@@ -579,52 +560,6 @@ func (project *Project) Clone() error {
 	return nil
 }
 
-func (project *Project) Build() error {
-	if err := project.LoadState(); err != nil {
-		return err
-	}
-	if project.State != "cloning" {
-		return nil
-	}
-	if LOG_MUTEX {
-		slog.Info("Lock", "project", project.Name)
-	}
-	project.mu.Lock()
-	project.State = "building"
-	project.mu.Unlock()
-	if LOG_MUTEX {
-		slog.Info("Unlock", "project", project.Name)
-	}
-	if err := project.Save(); err != nil {
-		return err
-	}
-
-	releaseDir, err := project.CurrentReleaseDir()
-	if err != nil {
-		return err
-	}
-
-	cmd := fmt.Sprintf(`docker build -t %s %s`, project.DockerImage(), releaseDir)
-	releaseNumber, err := project.CurrentReleaseNumber()
-	if err != nil {
-		return err
-	}
-	out, err := project.runReleaseCommand(releaseNumber, cmd)
-	if err != nil {
-		if LOG_MUTEX {
-			slog.Info("Lock", "project", project.Name)
-		}
-		project.mu.Lock()
-		project.State = fmt.Sprintf("Error: %v\n%s", err, out)
-		project.mu.Unlock()
-		if LOG_MUTEX {
-			slog.Info("Unlock", "project", project.Name)
-		}
-		return project.Save()
-	}
-	return nil
-}
-
 func (project *Project) Proxy() error {
 	if err := project.LoadState(); err != nil {
 		return err
@@ -632,7 +567,11 @@ func (project *Project) Proxy() error {
 	if project.State != "starting" {
 		return nil
 	}
-	if project.Domain == "" {
+	domain, _, err := ParseProjectDomain(project.Domain)
+	if err != nil {
+		return err
+	}
+	if domain == "" {
 		if LOG_MUTEX {
 			slog.Info("Lock", "project", project.Name)
 		}
@@ -656,12 +595,14 @@ func (project *Project) Proxy() error {
 	if err := project.Save(); err != nil {
 		return err
 	}
-
-	server_name := "undefined"
-	if project.Domain != "" {
-		server_name = project.Domain
+	if err := project.configureProxy(domain, project.Port); err != nil {
+		project.State = fmt.Sprintf("Error: %v", err)
+		return project.Save()
 	}
+	return nil
+}
 
+func (project *Project) configureProxy(domain string, port int) error {
 	content := fmt.Sprintf(`
 server {
 	listen 80;
@@ -677,7 +618,7 @@ server {
 		proxy_set_header Upgrade $http_upgrade;
 		proxy_set_header Connection "upgrade";
 	}
-}`, server_name, project.Port)
+}`, domain, port)
 
 	file := "default"
 	if project.Name != JAKELOUD {
@@ -694,16 +635,7 @@ server {
 	}
 
 	if out, err := ExecWrapped("nginx -t"); err != nil {
-		if LOG_MUTEX {
-			slog.Info("Lock", "project", project.Name)
-		}
-		project.mu.Lock()
-		project.State = fmt.Sprintf("Error: %v\n%s", err, out)
-		project.mu.Unlock()
-		if LOG_MUTEX {
-			slog.Info("Unlock", "project", project.Name)
-		}
-		return project.Save()
+		return fmt.Errorf("nginx config test failed: %w\n%s", err, out)
 	}
 
 	enabledPath := fmt.Sprintf("/etc/nginx/sites-enabled/%s", file)
@@ -718,111 +650,40 @@ server {
 	}
 
 	if out, err := ExecWrapped("service nginx restart"); err != nil {
-		if LOG_MUTEX {
-			slog.Info("Lock", "project", project.Name)
-		}
-		project.mu.Lock()
-		project.State = fmt.Sprintf("Error: %v\n%s", err, out)
-		project.mu.Unlock()
-		if LOG_MUTEX {
-			slog.Info("Unlock", "project", project.Name)
-		}
-		return project.Save()
+		return fmt.Errorf("nginx restart failed: %w\n%s", err, out)
 	}
 	return nil
 }
 
-func (project *Project) Start() error {
-	if err := project.LoadState(); err != nil {
-		return err
+func (project *Project) retargetProxy(port int) error {
+	file := project.Name
+	if project.Name == JAKELOUD {
+		file = "default"
 	}
-	if project.State != "building" {
-		return nil
-	}
-	if LOG_MUTEX {
-		slog.Info("Lock", "project", project.Name)
-	}
-	project.mu.Lock()
-	project.State = "starting"
-	project.mu.Unlock()
-	if LOG_MUTEX {
-		slog.Info("Unlock", "project", project.Name)
-	}
-	if err := project.Save(); err != nil {
-		return err
-	}
-
-	containerName, err := project.CurrentContainerName()
-	if err != nil {
-		return err
-	}
-
-	dockerOptions := ""
-	if opts, ok := project.Additional["dockerOptions"].(string); ok {
-		dockerOptions = opts
-	}
-
-	releaseNumber, err := project.CurrentReleaseNumber()
-	if err != nil {
-		return err
-	}
-	logFile, err := os.OpenFile(project.ReleaseLogPath(releaseNumber), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		return err
-	}
-	_, _ = fmt.Fprintf(logFile, "\n--- %s ---\n$ docker run --rm --sig-proxy=true --name %s -p %d:80 %s %s\n", time.Now().Format(time.RFC3339), containerName, project.Port, dockerOptions, project.DockerImage())
-	cmd := exec.Command("sh", "-c", fmt.Sprintf(`exec docker run --rm --sig-proxy=true --name %s -p %d:80 %s %s`, containerName, project.Port, dockerOptions, project.DockerImage()))
-	cmd.Stdout = logFile
-	cmd.Stderr = logFile
-	if err := cmd.Start(); err != nil {
-		logFile.Close()
-		if LOG_MUTEX {
-			slog.Info("Lock", "project", project.Name)
+	filePath := fmt.Sprintf("/etc/nginx/sites-available/%s", file)
+	if dry {
+		slog.Info("Retargeting proxy", "file", filePath, "port", port)
+	} else {
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			return err
 		}
-		project.mu.Lock()
-		project.State = fmt.Sprintf("Error: %v", err)
-		project.mu.Unlock()
-		if LOG_MUTEX {
-			slog.Info("Unlock", "project", project.Name)
+		proxyPass := regexp.MustCompile(`proxy_pass\s+http://127\.0\.0\.1:\d+;`)
+		if !proxyPass.Match(content) {
+			return errors.New("proxy_pass not found in nginx config")
 		}
-		return project.Save()
+		content = proxyPass.ReplaceAll(content, []byte(fmt.Sprintf("proxy_pass         http://127.0.0.1:%d;", port)))
+		if err := os.WriteFile(filePath, content, 0644); err != nil {
+			return err
+		}
 	}
-
-	release := &Release{
-		ProjectName:   project.Name,
-		Number:        releaseNumber,
-		ContainerName: containerName,
-		Cmd:           cmd,
-		Done:          make(chan struct{}),
+	if out, err := ExecWrapped("nginx -t"); err != nil {
+		return fmt.Errorf("nginx config test failed: %w\n%s", err, out)
 	}
-	registerRelease(release)
-	go waitForRelease(release, logFile)
+	if out, err := ExecWrapped("service nginx restart"); err != nil {
+		return fmt.Errorf("nginx restart failed: %w\n%s", err, out)
+	}
 	return nil
-}
-
-func waitForRelease(release *Release, logFile *os.File) {
-	err := release.Cmd.Wait()
-	_ = logFile.Close()
-	unregisterRelease(release)
-	close(release.Done)
-
-	if err == nil || release.stopRequested.Load() || shuttingDown.Load() {
-		return
-	}
-
-	project, getErr := GetProject(release.ProjectName)
-	if getErr != nil {
-		return
-	}
-	current, currentErr := project.CurrentReleaseNumber()
-	if currentErr != nil || current != release.Number {
-		return
-	}
-	project.State = fmt.Sprintf("Error: release r%d exited: %v", release.Number, err)
-	if saveErr := project.Save(); saveErr != nil {
-		slog.Info("Failed to save release failure", "project", release.ProjectName, "err", saveErr)
-	}
-	notifyReleaseFailure(fmt.Sprintf("*%s* release r%d failed: %v", release.ProjectName, release.Number, err))
 }
 
 func (project *Project) Cert() error {
@@ -832,7 +693,11 @@ func (project *Project) Cert() error {
 	if project.State != "proxying" {
 		return nil
 	}
-	if project.Domain == "" {
+	domain, _, err := ParseProjectDomain(project.Domain)
+	if err != nil {
+		return err
+	}
+	if domain == "" {
 		if LOG_MUTEX {
 			slog.Info("Lock", "project", project.Name)
 		}
@@ -861,7 +726,7 @@ func (project *Project) Cert() error {
 	if email == "" {
 		email = "no-reply@gmail.com"
 	}
-	cmd := fmt.Sprintf(`certbot -n --agree-tos --email %s --nginx -d %s`, email, project.Domain)
+	cmd := fmt.Sprintf(`certbot -n --agree-tos --email %s --nginx -d %s`, email, domain)
 	out, err := ExecWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
@@ -950,6 +815,16 @@ func (project *Project) Stop() error {
 	return nil
 }
 
+func (project *Project) Delete() error {
+	lock := projectLock(project.Name)
+	lock.Lock()
+	defer lock.Unlock()
+	if err := project.Stop(); err != nil {
+		return err
+	}
+	return project.Remove()
+}
+
 func (project *Project) Remove() error {
 	if err := project.LoadState(); err != nil {
 		return err
@@ -1003,7 +878,9 @@ func (project *Project) Remove() error {
 		}
 	}
 
-	conf, err := GetConf()
+	confMu.Lock()
+	defer confMu.Unlock()
+	conf, err := getConf()
 	if err != nil {
 		return err
 	}
@@ -1014,7 +891,7 @@ func (project *Project) Remove() error {
 		}
 	}
 	conf.Projects = newProjects
-	return SetConf(conf)
+	return setConf(conf)
 }
 
 func (project *Project) IsError() bool {
@@ -1022,36 +899,50 @@ func (project *Project) IsError() bool {
 }
 
 func (project *Project) Advance(force bool) error {
-	if (project.State == "🟢 running" || project.IsError()) && !force {
-		return nil
+	lock := projectLock(project.Name)
+	lock.Lock()
+	defer lock.Unlock()
+	return project.advance(force)
+}
+
+func (project *Project) advance(force bool) error {
+	if force {
+		if shuttingDown.Load() {
+			return errors.New("jakeloud is shutting down")
+		}
+		if err := project.Clone(); err != nil {
+			return err
+		}
+		return project.advance(false)
 	}
 	switch project.State {
+	case "":
+		if err := project.Clone(); err != nil {
+			return err
+		}
+		return project.advance(false)
 	case "cloning":
-		if err := project.Build(); err != nil {
-			return err
-		}
-	case "building":
-		if err := project.Start(); err != nil {
-			return err
-		}
+		return project.BuildAndRun()
+	case "awaiting liveness", "🟢 running":
+		return nil
 	case "starting":
 		if err := project.Proxy(); err != nil {
 			return err
 		}
+		return project.advance(false)
 	case "proxying":
 		if err := project.Cert(); err != nil {
 			return err
 		}
+		return project.advance(false)
 	case "cleanup":
-		if err := project.Cleanup(); err != nil {
-			return err
-		}
+		return project.Cleanup()
 	default:
-		if err := project.Clone(); err != nil {
-			return err
+		if project.IsError() {
+			return nil
 		}
+		return fmt.Errorf("unknown project state %q", project.State)
 	}
-	return project.Advance(false)
 }
 
 func GetProject(name string) (Project, error) {
@@ -1086,7 +977,9 @@ func IsAuthenticated(email, password string) (bool, error) {
 }
 
 func SetUser(email, password string) error {
-	conf, err := GetConf()
+	confMu.Lock()
+	defer confMu.Unlock()
+	conf, err := getConf()
 	if err != nil {
 		return err
 	}
@@ -1112,5 +1005,5 @@ func SetUser(email, password string) error {
 		conf.Users[userIndex] = User{Email: email, Hash: hash, Salt: saltStr}
 	}
 
-	return SetConf(conf)
+	return setConf(conf)
 }

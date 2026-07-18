@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/jakeloud/jl/entities"
 )
@@ -37,6 +38,10 @@ func GetProject(params apiRequest) (interface{}, error) {
 	}
 	currentRelease, err := project.CurrentReleaseNumber()
 	if err == nil {
+		project.Additional["currentRelease"] = currentRelease
+		if deadline, ok := entities.ReleasePromotionDeadline(project.Name, currentRelease); ok {
+			project.Additional["promotionDeadline"] = deadline.Format(time.RFC3339)
+		}
 		logData, readErr := os.ReadFile(project.ReleaseLogPath(currentRelease))
 		if readErr == nil {
 			const maxLogSize = 64 * 1024
