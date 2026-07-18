@@ -1,7 +1,6 @@
 [Unit]
 Description=Jakeloud
-After=network-online.target docker.service
-Requires=docker.service
+After=network.target
 StartLimitIntervalSec=0
 [Service]
 Type=simple
