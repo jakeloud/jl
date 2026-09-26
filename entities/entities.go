@@ -281,7 +281,8 @@ func Start(server interface{}) error {
 		return err
 	}
 
-	go redeployProjects()
+    // FIXME: if all projects queue up at the same time the load kills the server
+	// go redeployProjects()
 	return nil
 }
 

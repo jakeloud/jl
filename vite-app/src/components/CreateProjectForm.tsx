@@ -15,6 +15,8 @@ import { toast } from "sonner"
 const formSchema = z.object({
   name: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/, {
     message: "Use letters, numbers, underscores, dots, or hyphens",
+  }).refine((val) => val !== "jakeloud",{
+    message: `this name is reserved`,
   }),
   domainEnabled: z.boolean(),
   domainHost: z.string(),
