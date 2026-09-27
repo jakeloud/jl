@@ -8,6 +8,8 @@ Restart=always
 RestartSec=1
 User=root
 Group=root
+# Non-interactive command shells inherit this PATH; shell startup files are not read.
+Environment="PATH=/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ExecStart=/usr/local/bin/jl -d
 
 [Install]
