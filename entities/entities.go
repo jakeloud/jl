@@ -281,8 +281,7 @@ func Start(server interface{}) error {
 		return err
 	}
 
-    // FIXME: if all projects queue up at the same time the load kills the server
-	// go redeployProjects()
+	go redeployProjects()
 	return nil
 }
 
@@ -299,6 +298,10 @@ func redeployProjects() {
 		if err := project.Advance(true); err != nil {
 			slog.Info("Startup redeploy failed", "project", project.Name, "err", err)
 		}
+        _, delay, err := ParseProjectDomain(project.Domain)
+        if err == nil {
+            time.Sleep(delay)
+        }
 	}
 }
 
