@@ -297,21 +297,29 @@ func (project *Project) buildAndRun(ready chan<- struct{}) error {
 		Done:        make(chan struct{}),
 	}
 	release.alive.Store(true)
-	if ready != nil {
-		close(ready)
-	}
 	registerRelease(release)
 	go waitForRelease(release, logFile)
 
 	if !hasDomain {
 		if err := project.advance(false); err != nil {
+			if ready != nil {
+				close(ready)
+			}
 			return err
 		}
 		release.active.Store(true)
+		if ready != nil {
+			close(ready)
+		}
 		return nil
 	}
 
-	go coordinateReleasePromotion(release)
+	go func() {
+		coordinateReleasePromotion(release)
+		if ready != nil {
+			close(ready)
+		}
+	}()
 	return nil
 }
 
@@ -389,6 +397,15 @@ func promoteRelease(release *Release) error {
 	}
 	if project.State != "starting" {
 		return fmt.Errorf("project is not ready to promote: %s", project.State)
+	}
+
+	select {
+	case <-release.Done:
+		return errors.New("release exited during startup grace period")
+	case <-time.After(5 * time.Second):
+	}
+	if shuttingDown.Load() || !release.alive.Load() {
+		return errors.New("release is not alive after startup grace period")
 	}
 
 	project.State = "starting"
