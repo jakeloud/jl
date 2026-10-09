@@ -3,25 +3,22 @@ export interface ReleaseRuntime {
   pid?: number
   alive: boolean
   active: boolean
-  promotionDeadline?: string
 }
 
 export interface ProjectAdditional {
-  cmd?: string
+  cmd?: string[]
   currentRelease?: number
   runtime?: ReleaseRuntime
-  promotionDeadline?: string
   ps?: string
   logs?: string
   registerAllowed?: boolean
-  chatId?: string
-  botToken?: string
   sshKey?: string
 }
 
 export interface Project {
   name: string
-  domain?: string
+  domain?: string[]
+  version?: string
   repo?: string
   email?: string
   state?: string

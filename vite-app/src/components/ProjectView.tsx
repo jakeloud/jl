@@ -4,9 +4,7 @@ import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import type { Project } from "../types"
 import { getDomainFavicon } from "@/lib/favicon"
-import { defaultProjectCommand, formatProjectDomain, isValidProjectHost, parseProjectDomain } from "@/lib/projects"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
+import { defaultProjectCommand, isValidProjectHost, parseProjectDomain } from "@/lib/projects"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -25,6 +23,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { toast } from "sonner"
+import { CommandsEditor, DomainsEditor } from "@/components/ListEditors"
 
 interface ProjectViewProps {
   project: Project
@@ -36,22 +35,22 @@ type ProjectResponse = Project | { message: string }
 
 export function ProjectView({ project: initialProject, back, refreshConfig }: ProjectViewProps) {
   const [project, setProject] = useState(initialProject)
-  const [command, setCommand] = useState(initialProject.additional?.cmd || defaultProjectCommand(initialProject.name))
-  const [useDefaultCommand, setUseDefaultCommand] = useState(command === defaultProjectCommand(initialProject.name))
+  const initialCommands = initialProject.additional?.cmd?.length ? initialProject.additional.cmd : defaultProjectCommand(initialProject.name).split("\n")
+  const [commands, setCommands] = useState(initialCommands)
+  const [useDefaultCommand, setUseDefaultCommand] = useState(initialCommands.join("\n") === defaultProjectCommand(initialProject.name))
   const [favicon, setFavicon] = useState("")
-  const [faviconLoading, setFaviconLoading] = useState(Boolean(initialProject.domain))
+  const [faviconLoading, setFaviconLoading] = useState(Boolean(initialProject.domain?.length))
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isRebooting, setIsRebooting] = useState(false)
-  const [isConfirming, setIsConfirming] = useState(false)
   const [isUpdatingDomain, setIsUpdatingDomain] = useState(false)
   const [showDomainEditor, setShowDomainEditor] = useState(false)
-  const initialDomain = parseProjectDomain(initialProject.domain)
-  const [domainHost, setDomainHost] = useState(initialDomain.host)
-  const [timeoutMinutes, setTimeoutMinutes] = useState(initialDomain.timeoutMinutes)
+  const initialDomainValues = initialProject.domain || []
+  const [domains, setDomains] = useState(initialDomainValues.map((value) => parseProjectDomain(value).host))
   const { api } = useApi()
 
-  const domain = parseProjectDomain(project.domain)
+  const domainValues = project.domain || []
+  const domain = parseProjectDomain(domainValues[0])
   const runtime = project.additional?.runtime
   const state = project.state || "unknown"
   const currentRelease = project.additional?.currentRelease
@@ -61,9 +60,9 @@ export function ProjectView({ project: initialProject, back, refreshConfig }: Pr
   }, [initialProject])
 
   useEffect(() => {
-    const persistedCommand = project.additional?.cmd || defaultProjectCommand(project.name)
-    setCommand(persistedCommand)
-    setUseDefaultCommand(persistedCommand === defaultProjectCommand(project.name))
+    const persistedCommands = project.additional?.cmd?.length ? project.additional.cmd : defaultProjectCommand(project.name).split("\n")
+    setCommands(persistedCommands)
+    setUseDefaultCommand(persistedCommands.join("\n") === defaultProjectCommand(project.name))
   }, [project.additional?.cmd, project.name])
 
   useEffect(() => {
@@ -73,11 +72,11 @@ export function ProjectView({ project: initialProject, back, refreshConfig }: Pr
       return
     }
     setFaviconLoading(true)
-    getDomainFavicon(project.domain || "").then((url) => {
+    getDomainFavicon(domainValues[0] || "").then((url) => {
       setFavicon(url)
       setFaviconLoading(false)
     })
-  }, [domain.enabled, project.domain])
+  }, [domain.enabled, domainValues[0]])
 
   const getProject = async () => {
     setIsRefreshing(true)
@@ -93,12 +92,12 @@ export function ProjectView({ project: initialProject, back, refreshConfig }: Pr
     }
   }
 
-  const redeploy = async (nextDomain = project.domain || "") => {
+  const redeploy = async (nextDomains = domainValues) => {
     await api("createAppOp", {
       name: project.name,
-      domain: nextDomain,
+      domain: nextDomains,
       repo: project.repo || "",
-      additional: { cmd: useDefaultCommand ? "" : command },
+      additional: { cmd: useDefaultCommand ? [] : commands.map((line) => line.trim()).filter(Boolean) },
     })
   }
 
@@ -117,14 +116,13 @@ export function ProjectView({ project: initialProject, back, refreshConfig }: Pr
   }
 
   const handleDomainUpdate = async () => {
-    if (!isValidProjectHost(domainHost) || !Number.isInteger(timeoutMinutes) || timeoutMinutes < 1 || timeoutMinutes > 525600) {
-      toast.error("Enter a valid domain and timeout")
+    if (!domains.length || domains.some((host) => !isValidProjectHost(host)) || new Set(domains.map((host) => host.toLowerCase())).size !== domains.length) {
+      toast.error("Enter unique valid domains")
       return
     }
     setIsUpdatingDomain(true)
     try {
-      const nextDomain = formatProjectDomain(true, domainHost, timeoutMinutes)
-      await redeploy(nextDomain)
+      await redeploy(domains)
       setShowDomainEditor(false)
       toast.success("Domain update initiated")
       await refreshConfig()
@@ -133,21 +131,6 @@ export function ProjectView({ project: initialProject, back, refreshConfig }: Pr
       toast.error("Failed to update domain")
     } finally {
       setIsUpdatingDomain(false)
-    }
-  }
-
-  const handleConfirm = async () => {
-    if (!currentRelease) return
-    setIsConfirming(true)
-    try {
-      await api("confirmAppLivenessOp", { name: project.name, release: currentRelease })
-      toast.success("Release confirmed")
-      await refreshConfig()
-      await getProject()
-    } catch {
-      toast.error("Failed to confirm release")
-    } finally {
-      setIsConfirming(false)
     }
   }
 
@@ -166,14 +149,11 @@ export function ProjectView({ project: initialProject, back, refreshConfig }: Pr
   }
 
   const openDomainEditor = () => {
-    const value = parseProjectDomain(project.domain)
-    setDomainHost(value.host)
-    setTimeoutMinutes(value.timeoutMinutes)
+    const values = project.domain || []
+    setDomains(values.map((item) => parseProjectDomain(item).host))
     setShowDomainEditor(true)
   }
 
-  const deadline = runtime?.promotionDeadline || project.additional?.promotionDeadline
-  const canConfirm = state === "awaiting liveness" && domain.enabled && Boolean(currentRelease) && runtime?.alive
 
   return (
     <div className="container mx-auto max-w-5xl p-2">
@@ -190,18 +170,15 @@ export function ProjectView({ project: initialProject, back, refreshConfig }: Pr
                 {project.name}
               </CardTitle>
               <CardDescription className="mt-1 flex items-center gap-2">
-                {domain.enabled ? (
-                  <a href={`https://${domain.host}`} target="_blank" rel="noopener noreferrer" className="flex items-center hover:underline">
-                    {domain.host} <ExternalLink className="ml-1 h-3 w-3" />
-                  </a>
-                ) : "No domain"}
-                {domain.enabled && <span>{domain.timeoutMinutes} min liveness timeout</span>}
+                {domainValues.length ? domainValues.map((value) => {
+                  const item = parseProjectDomain(value)
+                  return <a key={item.host} href={`https://${item.host}`} target="_blank" rel="noopener noreferrer" className="mr-1 inline-flex items-center gap-1 rounded-full border bg-muted px-2 py-0.5 text-xs hover:underline">{item.host}<ExternalLink className="size-3" /></a>
+                }) : "No domain"}
                 <span className="relative">
                   <Button variant="ghost" size="icon" className="size-7" onClick={openDomainEditor}><Settings2 className="size-4" /></Button>
                   {showDomainEditor && (
                     <div className="absolute left-0 top-9 z-20 w-80 space-y-3 rounded-md border bg-popover p-4 text-popover-foreground shadow-md">
-                      <div className="space-y-1"><Label>Domain</Label><Input value={domainHost} onChange={(event) => setDomainHost(event.target.value)} /></div>
-                      <div className="space-y-1"><Label>Timeout in minutes</Label><Input type="number" min={1} max={525600} step={1} value={timeoutMinutes} onChange={(event) => setTimeoutMinutes(event.target.valueAsNumber)} /></div>
+                      <div className="space-y-1"><Label>Domains</Label><DomainsEditor value={domains} onChange={setDomains} /></div>
                       <div className="flex justify-end gap-2">
                         <Button size="sm" variant="outline" onClick={() => setShowDomainEditor(false)}>Cancel</Button>
                         <Button size="sm" onClick={handleDomainUpdate} disabled={isUpdatingDomain}>{isUpdatingDomain ? "Saving..." : "Save and redeploy"}</Button>
@@ -228,12 +205,8 @@ export function ProjectView({ project: initialProject, back, refreshConfig }: Pr
         <CardContent>
           <div className="flex items-center gap-2">
             <pre className="min-w-0 flex-1 overflow-x-auto rounded-md bg-muted p-4">{state.startsWith("Error") ? `Error: ${state.slice(6).trim()}` : state}</pre>
-            {canConfirm && (
-              <Button onClick={handleConfirm} disabled={isConfirming}>{isConfirming ? "Switching..." : "Confirm live and switch"}</Button>
-            )}
           </div>
           {project.additional?.ps && <pre className="mt-4 overflow-x-auto rounded-md bg-muted p-4">{project.additional.ps}</pre>}
-          {deadline && <p className="mt-3 text-sm text-muted-foreground">Automatic switch: {new Date(deadline).toLocaleString()}</p>}
           {project.additional?.logs && <pre className="mt-4 max-h-[36rem] overflow-auto rounded-md bg-muted p-4">{project.additional.logs}</pre>}
         </CardContent>
       </Card>
@@ -254,16 +227,16 @@ export function ProjectView({ project: initialProject, back, refreshConfig }: Pr
               checked={useDefaultCommand}
               onChange={(event) => {
                 setUseDefaultCommand(event.target.checked)
-                if (event.target.checked) setCommand(defaultProjectCommand(project.name))
+                if (event.target.checked) setCommands(defaultProjectCommand(project.name).split("\n"))
               }}
               className="size-4"
             />
             Use default command on next reboot
           </label>
           <div className="space-y-2">
-            <Label>Build and start command</Label>
-            <Textarea className="min-h-28 font-mono" value={command} disabled={useDefaultCommand} onChange={(event) => setCommand(event.target.value)} />
-            <p className="text-sm text-muted-foreground">Runs from the release directory. $PORT is provided; the server must remain in the foreground.</p>
+            <Label>Build and start commands</Label>
+            <div className={useDefaultCommand ? "pointer-events-none opacity-50" : ""}><CommandsEditor value={commands} onChange={setCommands} /></div>
+            <p className="text-sm text-muted-foreground">JakeLoud provides $PORT.</p>
           </div>
         </CardContent>
       </Card>

@@ -2,35 +2,33 @@ package entities
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
-	"time"
 )
 
-const defaultProxyDelay = 5 * time.Minute
-
-func ParseProjectDomain(value string) (string, time.Duration, error) {
-	if value == "" {
-		return "", 0, nil
+func ParseProjectDomain(value string) (string, error) {
+	if !validDomainHost(value) {
+		return "", fmt.Errorf("invalid project domain %q", value)
 	}
-	if strings.Contains(value, "://") || strings.ContainsAny(value, "/?# \t\r\n") {
-		return "", 0, fmt.Errorf("invalid project domain %q", value)
-	}
+	return value, nil
+}
 
-	host := value
-	delay := defaultProxyDelay
-	if separator := strings.LastIndex(value, ":"); separator >= 0 {
-		host = value[:separator]
-		minutes, err := strconv.Atoi(value[separator+1:])
-		if err != nil || minutes < 1 || minutes > 525600 {
-			return "", 0, fmt.Errorf("invalid proxy delay in domain %q", value)
+func (project Project) ProjectDomains() ([]string, error) {
+	values := project.Domain
+	seen := make(map[string]bool, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		host, err := ParseProjectDomain(value)
+		if err != nil {
+			return nil, err
 		}
-		delay = time.Duration(minutes) * time.Minute
+		key := strings.ToLower(host)
+		if seen[key] {
+			return nil, fmt.Errorf("duplicate project domain %q", host)
+		}
+		seen[key] = true
+		result = append(result, host)
 	}
-	if !validDomainHost(host) {
-		return "", 0, fmt.Errorf("invalid project domain %q", value)
-	}
-	return host, delay, nil
+	return result, nil
 }
 
 func validDomainHost(host string) bool {

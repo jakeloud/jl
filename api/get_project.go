@@ -40,9 +40,6 @@ func GetProject(params apiRequest) (interface{}, error) {
 		project.Additional["currentRelease"] = currentRelease
 		runtime := entities.ReleaseRuntimeStatus(project.Name, currentRelease)
 		project.Additional["runtime"] = runtime
-		if runtime.PromotionDeadline != "" {
-			project.Additional["promotionDeadline"] = runtime.PromotionDeadline
-		}
 		if runtime.Alive {
 			status := "running"
 			if runtime.Active {

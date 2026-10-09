@@ -21,48 +21,23 @@ type Release struct {
 	ID            string
 	Cmd           *exec.Cmd
 	Done          chan struct{}
-	Promote       chan promotionRequest
-	PromotionDone chan struct{}
-	PromoteAt     time.Time
 	alive         atomic.Bool
 	active        atomic.Bool
 	stopRequested atomic.Bool
 }
 
-type promotionRequest struct {
-	result chan error
-}
-
 type ReleaseRuntime struct {
-	Release           int    `json:"release"`
-	PID               int    `json:"pid,omitempty"`
-	Alive             bool   `json:"alive"`
-	Active            bool   `json:"active"`
-	PromotionDeadline string `json:"promotionDeadline,omitempty"`
+	Release int  `json:"release"`
+	PID     int  `json:"pid,omitempty"`
+	Alive   bool `json:"alive"`
+	Active  bool `json:"active"`
 }
 
 var (
-	releasesMu             sync.RWMutex
-	releases               = make(map[string]*Release)
-	shuttingDown           atomic.Bool
-	notifierMu             sync.RWMutex
-	releaseFailureNotifier func(string) error
+	releasesMu   sync.RWMutex
+	releases     = make(map[string]*Release)
+	shuttingDown atomic.Bool
 )
-
-func SetReleaseFailureNotifier(notifier func(string) error) {
-	notifierMu.Lock()
-	releaseFailureNotifier = notifier
-	notifierMu.Unlock()
-}
-
-func notifyReleaseFailure(message string) {
-	notifierMu.RLock()
-	notifier := releaseFailureNotifier
-	notifierMu.RUnlock()
-	if notifier != nil {
-		_ = notifier(message)
-	}
-}
 
 func registerRelease(release *Release) {
 	releasesMu.Lock()
@@ -118,23 +93,7 @@ func ReleaseRuntimeStatus(projectName string, releaseNumber int) ReleaseRuntime 
 	if release.Cmd.Process != nil {
 		status.PID = release.Cmd.Process.Pid
 	}
-	if deadline, ok := ReleasePromotionDeadline(projectName, releaseNumber); ok {
-		status.PromotionDeadline = deadline.Format(time.RFC3339)
-	}
 	return status
-}
-
-func ReleasePromotionDeadline(projectName string, releaseNumber int) (time.Time, bool) {
-	release, ok := getRelease(projectName, releaseNumber)
-	if !ok || release.PromoteAt.IsZero() || !release.alive.Load() {
-		return time.Time{}, false
-	}
-	select {
-	case <-release.PromotionDone:
-		return time.Time{}, false
-	default:
-	}
-	return release.PromoteAt, true
 }
 
 func requestReleaseStop(release *Release) {
@@ -156,7 +115,6 @@ func waitForReleases(releaseList []*Release, timeout time.Duration) bool {
 	go func() {
 		for _, release := range releaseList {
 			<-release.Done
-			<-release.PromotionDone
 		}
 		close(done)
 	}()
@@ -189,29 +147,45 @@ func releaseID(projectName string, releaseNumber int) string {
 	return fmt.Sprintf("%s-r%d", projectName, releaseNumber)
 }
 
-func (project *Project) defaultDeployCommand() string {
+func (project *Project) defaultDeployCommands() []string {
 	image := project.DockerImage()
-	return fmt.Sprintf(`docker build -t %s . && exec docker run -p "$PORT":80 --rm %s`, image, image)
+	return []string{fmt.Sprintf(`docker build -t %s .`, image), fmt.Sprintf(`docker run -p "$PORT":80 --rm %s`, image)}
 }
 
-func (project *Project) deployCommand() (string, error) {
+func (project *Project) deployCommand() ([]string, error) {
 	if project.Additional == nil {
 		project.Additional = make(map[string]interface{})
 	}
-	delete(project.Additional, "dockerOptions")
 	value, exists := project.Additional["cmd"]
 	if exists {
-		command, ok := value.(string)
-		if !ok {
-			return "", errors.New("additional.cmd must be a string")
+		var commands []string
+		switch values := value.(type) {
+		case []string:
+			commands = values
+		case []interface{}:
+			for _, value := range values {
+				command, ok := value.(string)
+				if !ok {
+					return nil, errors.New("additional.cmd must contain only strings")
+				}
+				commands = append(commands, command)
+			}
+		default:
+			return nil, errors.New("additional.cmd must be an array of strings")
 		}
-		if strings.TrimSpace(command) != "" {
-			return command, nil
+		result := make([]string, 0, len(commands))
+		for _, command := range commands {
+			if strings.TrimSpace(command) != "" {
+				result = append(result, command)
+			}
+		}
+		if len(result) > 0 {
+			return result, nil
 		}
 	}
-	command := project.defaultDeployCommand()
-	project.Additional["cmd"] = command
-	return command, nil
+	commands := project.defaultDeployCommands()
+	project.Additional["cmd"] = commands
+	return commands, nil
 }
 
 func releaseEnvironment(port int) []string {
@@ -226,6 +200,10 @@ func releaseEnvironment(port int) []string {
 }
 
 func (project *Project) BuildAndRun() error {
+	return project.buildAndRun(nil)
+}
+
+func (project *Project) buildAndRun(ready chan<- struct{}) error {
 	if shuttingDown.Load() {
 		return errors.New("jakeloud is shutting down")
 	}
@@ -244,27 +222,31 @@ func (project *Project) BuildAndRun() error {
 		return err
 	}
 	releaseID := project.ReleaseID(releaseNumber)
-	command, err := project.deployCommand()
+	commands, err := project.deployCommand()
 	if err != nil {
 		project.State = fmt.Sprintf("Error: %v", err)
 		_ = project.Save()
 		return err
 	}
-	domain, delay, err := ParseProjectDomain(project.Domain)
+	domains, err := project.ProjectDomains()
 	if err != nil {
 		return err
 	}
+	hasDomain := len(domains) > 0
 
-	project.State = "awaiting liveness"
-	if domain == "" {
+	project.State = "starting"
+	if !hasDomain {
 		project.State = "cleanup"
 	}
 	if err := project.Save(); err != nil {
 		return err
 	}
 	if dry {
-		slog.Info("Executing", "cmd", command, "dir", releaseDir)
-		if domain == "" {
+		slog.Info("Executing", "cmd", commands, "dir", releaseDir)
+		if ready != nil {
+			close(ready)
+		}
+		if !hasDomain {
 			return project.advance(false)
 		}
 		return nil
@@ -281,6 +263,18 @@ func (project *Project) BuildAndRun() error {
 		_ = project.Save()
 		return err
 	}
+	for _, command := range commands[:len(commands)-1] {
+		_, _ = fmt.Fprintf(logFile, "\n--- %s ---\n$ %s\n", time.Now().Format(time.RFC3339), command)
+		step := exec.Command("sh", "-c", command)
+		step.Dir, step.Env, step.Stdout, step.Stderr = releaseDir, releaseEnvironment(project.Port), logFile, logFile
+		if err := step.Run(); err != nil {
+			_ = logFile.Close()
+			project.State = fmt.Sprintf("Error: %v", err)
+			_ = project.Save()
+			return err
+		}
+	}
+	command := commands[len(commands)-1]
 	_, _ = fmt.Fprintf(logFile, "\n--- %s ---\n$ %s\n", time.Now().Format(time.RFC3339), command)
 	cmd := exec.Command("sh", "-c", command)
 	cmd.Dir = releaseDir
@@ -295,24 +289,21 @@ func (project *Project) BuildAndRun() error {
 	}
 
 	release := &Release{
-		ProjectName:   project.Name,
-		Number:        releaseNumber,
-		Port:          project.Port,
-		ID:            releaseID,
-		Cmd:           cmd,
-		Done:          make(chan struct{}),
-		Promote:       make(chan promotionRequest),
-		PromotionDone: make(chan struct{}),
+		ProjectName: project.Name,
+		Number:      releaseNumber,
+		Port:        project.Port,
+		ID:          releaseID,
+		Cmd:         cmd,
+		Done:        make(chan struct{}),
 	}
 	release.alive.Store(true)
-	if domain != "" {
-		release.PromoteAt = time.Now().Add(delay)
+	if ready != nil {
+		close(ready)
 	}
 	registerRelease(release)
 	go waitForRelease(release, logFile)
 
-	if domain == "" {
-		close(release.PromotionDone)
+	if !hasDomain {
 		if err := project.advance(false); err != nil {
 			return err
 		}
@@ -320,7 +311,7 @@ func (project *Project) BuildAndRun() error {
 		return nil
 	}
 
-	go coordinateReleasePromotion(release, delay)
+	go coordinateReleasePromotion(release)
 	return nil
 }
 
@@ -353,27 +344,13 @@ func waitForRelease(release *Release, logFile *os.File) {
 	if saveErr := project.Save(); saveErr != nil {
 		slog.Info("Failed to save release failure", "project", release.ProjectName, "err", saveErr)
 	}
-	notifyReleaseFailure(fmt.Sprintf("*%s* release r%d failed: %v", release.ProjectName, release.Number, err))
 }
 
-func coordinateReleasePromotion(release *Release, delay time.Duration) {
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	defer close(release.PromotionDone)
-
-	var request *promotionRequest
-	select {
-	case <-release.Done:
+func coordinateReleasePromotion(release *Release) {
+	if !release.alive.Load() {
 		return
-	case received := <-release.Promote:
-		request = &received
-	case <-timer.C:
 	}
-
 	err := promoteRelease(release)
-	if request != nil {
-		request.result <- err
-	}
 	if err != nil && release.alive.Load() {
 		project, projectErr := GetProject(release.ProjectName)
 		if projectErr != nil {
@@ -383,7 +360,6 @@ func coordinateReleasePromotion(release *Release, delay time.Duration) {
 		if currentErr != nil || current != release.Number {
 			return
 		}
-		notifyReleaseFailure(fmt.Sprintf("*%s* release r%d promotion failed: %v", release.ProjectName, release.Number, err))
 	}
 }
 
@@ -411,8 +387,8 @@ func promoteRelease(release *Release) error {
 	if current != release.Number {
 		return errors.New("release has been superseded")
 	}
-	if project.State != "awaiting liveness" {
-		return fmt.Errorf("project is not awaiting liveness: %s", project.State)
+	if project.State != "starting" {
+		return fmt.Errorf("project is not ready to promote: %s", project.State)
 	}
 
 	project.State = "starting"
@@ -452,8 +428,8 @@ func rollbackPromotion(project *Project, release *Release, err error) error {
 }
 
 func restorePreviousProxy(project *Project, currentRelease int) error {
-	domain, _, err := ParseProjectDomain(project.Domain)
-	if err != nil || domain == "" {
+	domains, err := project.ProjectDomains()
+	if err != nil || len(domains) == 0 {
 		return err
 	}
 	var previous *Release
@@ -474,41 +450,4 @@ func savePromotionError(project *Project, releaseNumber int, err error) error {
 		slog.Info("Failed to save promotion failure", "project", project.Name, "err", saveErr)
 	}
 	return err
-}
-
-func ConfirmRelease(projectName string, releaseNumber int) error {
-	project, err := GetProject(projectName)
-	if err != nil {
-		return err
-	}
-	domain, _, err := ParseProjectDomain(project.Domain)
-	if err != nil {
-		return err
-	}
-	if domain == "" {
-		return errors.New("project does not use a domain")
-	}
-	if project.State != "awaiting liveness" {
-		return fmt.Errorf("project is not awaiting liveness: %s", project.State)
-	}
-
-	release, ok := getRelease(projectName, releaseNumber)
-	if !ok || !release.alive.Load() {
-		return errors.New("release is not alive")
-	}
-	request := promotionRequest{result: make(chan error, 1)}
-	select {
-	case release.Promote <- request:
-	case <-release.Done:
-		return errors.New("release exited before confirmation")
-	case <-release.PromotionDone:
-		return errors.New("release promotion has already completed")
-	}
-
-	select {
-	case err := <-request.result:
-		return err
-	case <-release.Done:
-		return errors.New("release exited during promotion")
-	}
 }
