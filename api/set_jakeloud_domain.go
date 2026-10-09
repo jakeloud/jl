@@ -27,11 +27,10 @@ func SetJakeloudDomain(params apiRequest) error {
 		return err
 	}
 
-	if params.Domain == "" {
-		params.Domain = jakeloudProject.Domain
-	}
-
 	jakeloudProject.Domain = params.Domain
+	if _, err := jakeloudProject.ProjectDomains(); err != nil {
+		return err
+	}
 	jakeloudProject.Email = params.Email
 	jakeloudProject.State = "starting"
 

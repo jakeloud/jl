@@ -7,10 +7,10 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { Button } from "@/components/ui/button"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { useApi } from "@/hooks/useApi"
-import { defaultProjectCommand, formatProjectDomain, isValidProjectHost } from "@/lib/projects"
+import { defaultProjectCommand, isValidProjectHost } from "@/lib/projects"
 import { toast } from "sonner"
+import { CommandsEditor, DomainsEditor } from "@/components/ListEditors"
 
 const formSchema = z.object({
   name: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/, {
@@ -19,17 +19,16 @@ const formSchema = z.object({
     message: `this name is reserved`,
   }),
   domainEnabled: z.boolean(),
-  domainHost: z.string(),
-  timeoutMinutes: z.number().int().min(1).max(525600),
+  domain: z.array(z.string()),
   repo: z.string().min(1, { message: "Repository URL is required" }),
   useDefaultCommand: z.boolean(),
-  cmd: z.string(),
+  cmd: z.array(z.string()),
 }).superRefine((values, context) => {
-  if (values.domainEnabled && !isValidProjectHost(values.domainHost)) {
-    context.addIssue({ code: "custom", path: ["domainHost"], message: "Enter a valid hostname" })
+  if (values.domainEnabled && (!values.domain.length || values.domain.some((host) => !isValidProjectHost(host)) || new Set(values.domain.map((host) => host.toLowerCase())).size !== values.domain.length)) {
+    context.addIssue({ code: "custom", path: ["domain"], message: "Add unique valid hostnames" })
   }
-  if (!values.useDefaultCommand && !values.cmd.trim()) {
-    context.addIssue({ code: "custom", path: ["cmd"], message: "Command is required" })
+  if (!values.useDefaultCommand && (!values.cmd.length || values.cmd.some((command) => !command.trim()))) {
+    context.addIssue({ code: "custom", path: ["cmd"], message: "Add at least one command" })
   }
 })
 
@@ -48,11 +47,10 @@ export function CreateProjectForm({ onSuccess, onCancel }: CreateProjectFormProp
     defaultValues: {
       name: "",
       domainEnabled: false,
-      domainHost: "",
-      timeoutMinutes: 5,
+      domain: [],
       repo: "",
       useDefaultCommand: true,
-      cmd: defaultProjectCommand(""),
+      cmd: defaultProjectCommand("").split("\n"),
     },
   })
 
@@ -62,7 +60,7 @@ export function CreateProjectForm({ onSuccess, onCancel }: CreateProjectFormProp
 
   useEffect(() => {
     if (useDefaultCommand) {
-      form.setValue("cmd", defaultProjectCommand(name))
+      form.setValue("cmd", defaultProjectCommand(name).split("\n"))
     }
   }, [form, name, useDefaultCommand])
 
@@ -72,8 +70,8 @@ export function CreateProjectForm({ onSuccess, onCancel }: CreateProjectFormProp
       await api("createAppOp", {
         name: values.name,
         repo: values.repo,
-        domain: formatProjectDomain(values.domainEnabled, values.domainHost, values.timeoutMinutes),
-        additional: { cmd: values.useDefaultCommand ? "" : values.cmd },
+        domain: values.domainEnabled ? values.domain : [],
+        additional: { cmd: values.useDefaultCommand ? [] : values.cmd },
       })
       toast.success("Project creation initiated. Refresh to track progress.")
       onSuccess()
@@ -116,21 +114,11 @@ export function CreateProjectForm({ onSuccess, onCancel }: CreateProjectFormProp
           )} />
 
           {domainEnabled && (
-            <div className="grid gap-4 sm:grid-cols-[1fr_12rem]">
-              <FormField control={form.control} name="domainHost" render={({ field }) => (
+            <div>
+              <FormField control={form.control} name="domain" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Domain</FormLabel>
-                  <FormControl><Input placeholder="project.example.com" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="timeoutMinutes" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Liveness timeout</FormLabel>
-                  <FormControl>
-                    <Input type="number" min={1} max={525600} value={field.value} onChange={(event) => field.onChange(event.target.valueAsNumber)} />
-                  </FormControl>
-                  <FormDescription>Minutes</FormDescription>
+                  <FormLabel>Domains</FormLabel>
+                  <FormControl><DomainsEditor value={field.value} onChange={field.onChange} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
@@ -148,9 +136,9 @@ export function CreateProjectForm({ onSuccess, onCancel }: CreateProjectFormProp
 
           <FormField control={form.control} name="cmd" render={({ field }) => (
             <FormItem>
-              <FormLabel>Build and start command</FormLabel>
-              <FormControl><Textarea className="min-h-28 font-mono" disabled={useDefaultCommand} {...field} /></FormControl>
-              <FormDescription>JakeLoud runs this from the release directory and provides $PORT.</FormDescription>
+              <FormLabel>Build and start commands</FormLabel>
+              <FormControl><div className={useDefaultCommand ? "pointer-events-none opacity-50" : ""}><CommandsEditor value={field.value} onChange={field.onChange} /></div></FormControl>
+              <FormDescription>JakeLoud provides $PORT.</FormDescription>
               <FormMessage />
             </FormItem>
           )} />

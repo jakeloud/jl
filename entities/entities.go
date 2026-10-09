@@ -27,6 +27,7 @@ import (
 const (
 	PROJECTS_ROOT = "/app"
 	JAKELOUD      = "jakeloud"
+	Version       = "0.2.0"
 	LOG_MUTEX     = false
 )
 
@@ -35,7 +36,7 @@ var SSH_KEY = PROJECTS_ROOT + "/id_rsa"
 var SSH_KEY_PUB = PROJECTS_ROOT + "/id_rsa.pub"
 
 var dry bool = false
-var dry_conf []byte = []byte("{\"apps\":[{\"name\":\"jakeloud\",\"port\":666}],\"users\":[]}")
+var dry_conf []byte = []byte("{\"apps\":[{\"name\":\"jakeloud\",\"port\":666,\"version\":\"0.2.0\"}],\"users\":[]}")
 
 var (
 	confMu         sync.Mutex
@@ -49,7 +50,8 @@ func SetDry(d bool) {
 
 type Project struct {
 	Name       string                 `json:"name"`
-	Domain     string                 `json:"domain,omitempty"`
+	Domain     []string               `json:"domain,omitempty"`
+	Version    string                 `json:"version,omitempty"`
 	Repo       string                 `json:"repo,omitempty"`
 	Port       int                    `json:"port,omitempty"`
 	State      string                 `json:"state,omitempty"`
@@ -129,7 +131,7 @@ func getConf() (Config, error) {
 	if err != nil {
 		fmt.Printf("Problem with conf.json: %v\n", err)
 		conf = Config{
-			Projects: []Project{{Name: JAKELOUD, Port: 666}},
+			Projects: []Project{{Name: JAKELOUD, Port: 666, Version: Version}},
 			Users:    []User{},
 		}
 		return conf, nil
@@ -191,23 +193,17 @@ func (project *Project) runReleaseCommand(releaseNumber int, command string) (st
 	return string(output), err
 }
 
-func ClearCache() (string, error) {
-	if dry {
-		slog.Info("Clearing cache")
-		return "", nil
-	}
-
-	res, err := ExecWrapped("docker system prune -af")
-	if err != nil {
-		return err.Error(), err
-	}
-	return res, nil
-}
-
 func Start(server interface{}) error {
 	project, err := GetProject(JAKELOUD)
 	if err != nil {
 		return err
+	}
+	if project.Version == "" {
+		project.Version = Version
+	}
+	if project.Additional != nil {
+		delete(project.Additional, "botToken")
+		delete(project.Additional, "chatId")
 	}
 
 	if !dry {
@@ -251,7 +247,7 @@ func Start(server interface{}) error {
 		slog.Info("Unlock", "project", project.Name)
 	}
 
-	if project.Domain == "" {
+	if len(project.Domain) == 0 {
 		dom, err := ip_getter.GetPublicIP()
 		if err != nil {
 			slog.Info("Failed to get ip", "err", err)
@@ -261,7 +257,7 @@ func Start(server interface{}) error {
 			slog.Info("Lock", "project", project.Name)
 		}
 		project.mu.Lock()
-		project.Domain = fmt.Sprintf("jakeloud.%s.sslip.io", dom)
+		project.Domain = []string{fmt.Sprintf("jakeloud.%s.sslip.io", dom)}
 		project.mu.Unlock()
 		if LOG_MUTEX {
 			slog.Info("Unlock", "project", project.Name)
@@ -291,17 +287,18 @@ func redeployProjects() {
 		slog.Info("Failed to load projects for startup redeploy", "err", err)
 		return
 	}
+	var ready <-chan struct{}
 	for _, project := range conf.Projects {
 		if project.Name == JAKELOUD {
 			continue
 		}
-		if err := project.Advance(true); err != nil {
-			slog.Info("Startup redeploy failed", "project", project.Name, "err", err)
+		if ready != nil {
+			<-ready
 		}
-        _, delay, err := ParseProjectDomain(project.Domain)
-        if err == nil {
-            time.Sleep(delay)
-        }
+		if err := project.AdvanceWithReady(true, &ready); err != nil {
+			slog.Info("Startup redeploy failed", "project", project.Name, "err", err)
+			ready = nil
+		}
 	}
 }
 
@@ -571,11 +568,11 @@ func (project *Project) Proxy() error {
 	if project.State != "starting" {
 		return nil
 	}
-	domain, _, err := ParseProjectDomain(project.Domain)
+	domains, err := project.ProjectDomains()
 	if err != nil {
 		return err
 	}
-	if domain == "" {
+	if len(domains) == 0 {
 		if LOG_MUTEX {
 			slog.Info("Lock", "project", project.Name)
 		}
@@ -599,14 +596,15 @@ func (project *Project) Proxy() error {
 	if err := project.Save(); err != nil {
 		return err
 	}
-	if err := project.configureProxy(domain, project.Port); err != nil {
+	if err := project.configureProxy(domains, project.Port); err != nil {
 		project.State = fmt.Sprintf("Error: %v", err)
 		return project.Save()
 	}
 	return nil
 }
 
-func (project *Project) configureProxy(domain string, port int) error {
+func (project *Project) configureProxy(domains []string, port int) error {
+	domain := strings.Join(domains, " ")
 	content := fmt.Sprintf(`
 server {
 	listen 80;
@@ -697,11 +695,11 @@ func (project *Project) Cert() error {
 	if project.State != "proxying" {
 		return nil
 	}
-	domain, _, err := ParseProjectDomain(project.Domain)
+	domains, err := project.ProjectDomains()
 	if err != nil {
 		return err
 	}
-	if domain == "" {
+	if len(domains) == 0 {
 		if LOG_MUTEX {
 			slog.Info("Lock", "project", project.Name)
 		}
@@ -730,7 +728,10 @@ func (project *Project) Cert() error {
 	if email == "" {
 		email = "no-reply@gmail.com"
 	}
-	cmd := fmt.Sprintf(`certbot -n --agree-tos --email %s --nginx -d %s`, email, domain)
+	cmd := fmt.Sprintf(`certbot -n --agree-tos --email %s --nginx`, email)
+	for _, domain := range domains {
+		cmd += fmt.Sprintf(` -d %s`, domain)
+	}
 	out, err := ExecWrapped(cmd)
 	if err != nil {
 		if LOG_MUTEX {
@@ -780,7 +781,6 @@ func (project *Project) Cleanup() error {
 		if saveErr := project.Save(); saveErr != nil {
 			return saveErr
 		}
-		notifyReleaseFailure(fmt.Sprintf("*%s* cleanup failed: %v", project.Name, err))
 		return err
 	}
 
@@ -856,7 +856,6 @@ func (project *Project) Remove() error {
 		if saveErr := project.Save(); saveErr != nil {
 			return saveErr
 		}
-		notifyReleaseFailure(fmt.Sprintf("*%s* removal failed: %v", project.Name, err))
 		return err
 	}
 
@@ -903,13 +902,27 @@ func (project *Project) IsError() bool {
 }
 
 func (project *Project) Advance(force bool) error {
+	return project.AdvanceWithReady(force, nil)
+}
+
+func (project *Project) AdvanceWithReady(force bool, ready *<-chan struct{}) error {
 	lock := projectLock(project.Name)
 	lock.Lock()
 	defer lock.Unlock()
-	return project.advance(force)
+	var signal chan<- struct{}
+	if ready != nil {
+		ch := make(chan struct{})
+		*ready = ch
+		signal = ch
+	}
+	return project.advanceReady(force, signal)
 }
 
 func (project *Project) advance(force bool) error {
+	return project.advanceReady(force, nil)
+}
+
+func (project *Project) advanceReady(force bool, ready chan<- struct{}) error {
 	if force {
 		if shuttingDown.Load() {
 			return errors.New("jakeloud is shutting down")
@@ -917,28 +930,28 @@ func (project *Project) advance(force bool) error {
 		if err := project.Clone(); err != nil {
 			return err
 		}
-		return project.advance(false)
+		return project.advanceReady(false, ready)
 	}
 	switch project.State {
 	case "":
 		if err := project.Clone(); err != nil {
 			return err
 		}
-		return project.advance(false)
+		return project.advanceReady(false, ready)
 	case "cloning":
-		return project.BuildAndRun()
-	case "awaiting liveness", "🟢 running":
+		return project.buildAndRun(ready)
+	case "🟢 running":
 		return nil
 	case "starting":
 		if err := project.Proxy(); err != nil {
 			return err
 		}
-		return project.advance(false)
+		return project.advanceReady(false, ready)
 	case "proxying":
 		if err := project.Cert(); err != nil {
 			return err
 		}
-		return project.advance(false)
+		return project.advanceReady(false, ready)
 	case "cleanup":
 		return project.Cleanup()
 	default:

@@ -11,10 +11,9 @@ type apiRequest struct {
 	Op         string                 `json:"op"`
 	Email      string                 `json:"email"`
 	Password   string                 `json:"password"`
-	Domain     string                 `json:"domain"`
+	Domain     []string               `json:"domain"`
 	Name       string                 `json:"name"`
 	Repo       string                 `json:"repo"`
-	Release    int                    `json:"release"`
 	Additional map[string]interface{} `json:"additional"`
 }
 
@@ -33,8 +32,6 @@ func API(w http.ResponseWriter, r *http.Request) {
 	switch body.Op {
 	case "setJakeloudDomainOp":
 		err = SetJakeloudDomain(body)
-	case "setJakeloudAdditionalOp":
-		err = SetJakeloudAdditional(body)
 	case "registerOp":
 		err = Register(body)
 	case "getConfOp":
@@ -57,12 +54,8 @@ func API(w http.ResponseWriter, r *http.Request) {
 		}
 	case "createAppOp":
 		err = CreateProject(body)
-	case "confirmAppLivenessOp":
-		err = ConfirmProjectLiveness(body)
 	case "deleteAppOp":
 		err = DeleteProject(body)
-	case "clearCacheOp":
-		err = ClearCacheOp(body)
 	default:
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"message":"noop"}`))

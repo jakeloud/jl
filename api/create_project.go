@@ -2,14 +2,11 @@ package api
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/jakeloud/jl/entities"
-	"github.com/jakeloud/jl/logger"
 )
 
 func CreateProject(params apiRequest) error {
-	startTime := time.Now()
 
 	// Validate authentication and required fields
 	authenticated, err := entities.IsAuthenticated(params.Email, params.Password)
@@ -20,59 +17,39 @@ func CreateProject(params apiRequest) error {
 		return nil
 	}
 
-	if _, _, err := entities.ParseProjectDomain(params.Domain); err != nil {
-		return fmt.Errorf("invalid project domain: %v", err)
-	}
-
-	cmd := ""
-	cmdProvided := false
+	commands := []string{}
 	if params.Additional != nil {
 		if value, exists := params.Additional["cmd"]; exists {
-			cmdProvided = true
-			var ok bool
-			cmd, ok = value.(string)
+			values, ok := value.([]interface{})
 			if !ok {
-				return fmt.Errorf("additional.cmd must be a string")
+				return fmt.Errorf("additional.cmd must be an array of strings")
 			}
-		}
-	}
-	if !cmdProvided {
-		if existing, err := entities.GetProject(params.Name); err == nil && existing.Additional != nil {
-			if value, exists := existing.Additional["cmd"]; exists {
-				var ok bool
-				cmd, ok = value.(string)
+			for _, value := range values {
+				command, ok := value.(string)
 				if !ok {
-					return fmt.Errorf("persisted additional.cmd must be a string")
+					return fmt.Errorf("additional.cmd must contain only strings")
 				}
+				commands = append(commands, command)
 			}
 		}
 	}
-
 	project := entities.Project{
 		Email:      params.Email,
 		Domain:     params.Domain,
 		Repo:       params.Repo,
 		Name:       params.Name,
-		Additional: map[string]interface{}{"cmd": cmd},
+		Additional: map[string]interface{}{"cmd": commands},
+	}
+	if _, err := project.ProjectDomains(); err != nil {
+		return fmt.Errorf("invalid project domains: %v", err)
 	}
 
 	if err := project.DeployWithNewPort(); err != nil {
 		return fmt.Errorf("failed to deploy project: %v", err)
 	}
 
-	dt := int(time.Since(startTime).Seconds())
-
 	if err := project.LoadState(); err != nil {
 		return fmt.Errorf("failed to load project state: %v", err)
-	}
-
-	logMessage := fmt.Sprintf("*%s* deployment started\\. _%ds_", project.Name, dt)
-	if project.IsError() {
-		logMessage = fmt.Sprintf("*%s* Failed to start\\. _%ds_", project.Name, dt)
-	}
-
-	if err := logger.Log(logMessage); err != nil {
-		return fmt.Errorf("failed to log project status: %v", err)
 	}
 
 	return nil

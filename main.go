@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/jakeloud/jl/entities"
-	"github.com/jakeloud/jl/logger"
 	"github.com/jakeloud/jl/server"
 	"github.com/jakeloud/jl/setup"
 )
@@ -27,7 +26,6 @@ func main() {
 		return
 	}
 
-	entities.SetReleaseFailureNotifier(logger.Log)
 	if err := server.Start(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}

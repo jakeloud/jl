@@ -20,7 +20,8 @@ interface ProjectCardProps {
 }
 
 export function ProjectCard({ project, onSelect, refreshConfig }: ProjectCardProps) {
-  const domain = parseProjectDomain(project.domain)
+  const domainValues = project.domain || []
+  const domain = parseProjectDomain(domainValues[0])
   const [isRebooting, setIsRebooting] = useState(false)
   const [favicon, setFavicon] = useState("")
   const [faviconLoading, setFaviconLoading] = useState(domain.enabled)
@@ -31,9 +32,9 @@ export function ProjectCard({ project, onSelect, refreshConfig }: ProjectCardPro
     try {
       await api("createAppOp", {
         name: project.name,
-        domain: project.domain || "",
+        domain: domainValues,
         repo: project.repo || "",
-        additional: { cmd: project.additional?.cmd || "" },
+        additional: { cmd: project.additional?.cmd || [] },
       })
       toast.success("Project reboot initiated")
       refreshConfig()
@@ -54,11 +55,11 @@ export function ProjectCard({ project, onSelect, refreshConfig }: ProjectCardPro
       return
     }
     setFaviconLoading(true)
-    getDomainFavicon(project.domain || "").then((url) => {
+    getDomainFavicon(domainValues[0] || "").then((url) => {
       setFavicon(url)
       setFaviconLoading(false)
     })
-  }, [domain.enabled, project.domain])
+  }, [domain.enabled, domainValues[0]])
 
   return (
     <Card>
@@ -77,12 +78,10 @@ export function ProjectCard({ project, onSelect, refreshConfig }: ProjectCardPro
               {project.name}
             </CardTitle>
             <CardDescription>
-              {domain.enabled ? (
-                <a href={`https://${domain.host}`} target="_blank" rel="noopener noreferrer" className="flex items-center hover:underline">
-                  {domain.host} <ExternalLink className="ml-1 h-3 w-3" />
-                </a>
-              ) : "No domain"}
-              {domain.enabled && <span className="ml-2">Switch after {domain.timeoutMinutes} min</span>}
+              {domainValues.length ? domainValues.map((value) => {
+                const item = parseProjectDomain(value)
+                return <a key={item.host} href={`https://${item.host}`} target="_blank" rel="noopener noreferrer" className="mr-1 inline-flex items-center gap-1 rounded-full border bg-muted px-2 py-0.5 text-xs hover:underline">{item.host}<ExternalLink className="size-3" /></a>
+              }) : "No domain"}
             </CardDescription>
           </div>
           <Badge variant={state === "🟢 running" ? "default" : "secondary"}>{stateShort}</Badge>
