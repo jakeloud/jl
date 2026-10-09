@@ -728,7 +728,7 @@ func (project *Project) Cert() error {
 	if email == "" {
 		email = "no-reply@gmail.com"
 	}
-	cmd := fmt.Sprintf(`certbot -n --agree-tos --email %s --nginx`, email)
+	cmd := fmt.Sprintf(`certbot -n --agree-tos --email %s --nginx --expand`, email)
 	for _, domain := range domains {
 		cmd += fmt.Sprintf(` -d %s`, domain)
 	}
