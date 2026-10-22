@@ -47,6 +47,11 @@ export function ProjectCard({ project, onSelect, refreshConfig }: ProjectCardPro
 
   const state = project.state || "unknown"
   const stateShort = state.startsWith("Error") ? "Error" : state
+  const stateVariant = state.startsWith("Error")
+    ? "destructive"
+    : state === "🟢 running"
+      ? "default"
+      : state === "in queue" ? "outline" : "secondary"
 
   useEffect(() => {
     if (!domain.enabled) {
@@ -84,7 +89,7 @@ export function ProjectCard({ project, onSelect, refreshConfig }: ProjectCardPro
               }) : "No domain"}
             </CardDescription>
           </div>
-          <Badge variant={state === "🟢 running" ? "default" : "secondary"}>{stateShort}</Badge>
+          <Badge variant={stateVariant}>{stateShort}</Badge>
         </div>
       </CardHeader>
       <CardContent className="flex-1 text-sm">

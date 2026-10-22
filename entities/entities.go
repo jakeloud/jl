@@ -14,7 +14,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -277,29 +276,73 @@ func Start(server interface{}) error {
 		return err
 	}
 
-	go redeployProjects()
+	names, err := queueStartupProjects()
+	if err != nil {
+		return err
+	}
+	go redeployProjects(names)
 	return nil
 }
 
-func redeployProjects() {
-	conf, err := GetConf()
+// Persist the queue before the API starts accepting requests.
+func queueStartupProjects() ([]string, error) {
+	confMu.Lock()
+	defer confMu.Unlock()
+	conf, err := getConf()
 	if err != nil {
-		slog.Info("Failed to load projects for startup redeploy", "err", err)
-		return
+		return nil, err
 	}
-	var ready <-chan struct{}
-	for _, project := range conf.Projects {
-		if project.Name == JAKELOUD {
+	var names []string
+	for i := range conf.Projects {
+		project := &conf.Projects[i]
+		if project.Name != JAKELOUD {
+			project.State = "in queue"
+			names = append(names, project.Name)
+		}
+	}
+	return names, setConf(conf)
+}
+
+func redeployProjects(names []string) {
+	for _, name := range names {
+		if shuttingDown.Load() {
+			return
+		}
+		ready, err := startQueuedProject(name)
+		if err != nil {
+			slog.Error("Startup redeploy failed", "project", name, "err", err)
 			continue
 		}
 		if ready != nil {
 			<-ready
 		}
-		if err := project.AdvanceWithReady(true, &ready); err != nil {
-			slog.Info("Startup redeploy failed", "project", project.Name, "err", err)
-			ready = nil
-		}
 	}
+}
+
+func startQueuedProject(name string) (<-chan struct{}, error) {
+	lock := projectLock(name)
+	lock.Lock()
+	defer lock.Unlock()
+	project, err := GetProject(name)
+	if err != nil {
+		return nil, err
+	}
+	// A user may have deleted or manually deployed this project while it waited.
+	if project.State != "in queue" || shuttingDown.Load() {
+		return nil, nil
+	}
+	ready := make(chan struct{})
+	if err := project.advanceReady(true, ready); err != nil {
+		project.State = fmt.Sprintf("Error: startup redeploy failed: %v", err)
+		if saveErr := project.Save(); saveErr != nil {
+			return nil, errors.Join(err, saveErr)
+		}
+		return nil, err
+	}
+	if project.IsError() {
+		return nil, errors.New(project.State)
+	}
+	return ready, nil
 }
 
 func (project *Project) Save() error {
@@ -474,20 +517,6 @@ func (project *Project) NewRelease() (string, error) {
 		return "", err
 	}
 
-	keep := map[int]bool{next: true, next - 1: true}
-	oldReleaseNumbers := make([]int, 0)
-	for n := range releases {
-		if !keep[n] {
-			oldReleaseNumbers = append(oldReleaseNumbers, n)
-		}
-	}
-	sort.Ints(oldReleaseNumbers)
-	for _, n := range oldReleaseNumbers {
-		if err := os.RemoveAll(releases[n]); err != nil {
-			return "", err
-		}
-	}
-
 	return releaseDir, nil
 }
 
@@ -506,6 +535,10 @@ func (project *Project) LoadState() error {
 		slog.Info("Unlock", "project", project.Name)
 	}
 	return nil
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
 
 func (project *Project) Clone() error {
@@ -537,26 +570,21 @@ func (project *Project) Clone() error {
 		if LOG_MUTEX {
 			slog.Info("Unlock", "project", project.Name)
 		}
-		return project.Save()
+		return errors.Join(err, project.Save())
 	}
 
 	releaseNumberValue, ok := releaseNumber(filepath.Base(releaseDir))
 	if !ok {
 		return fmt.Errorf("invalid release directory: %s", releaseDir)
 	}
-	cmd := fmt.Sprintf(`eval "$(ssh-agent -s)"; ssh-add %s; git clone --depth 1 %s %s; kill $SSH_AGENT_PID`, SSH_KEY, project.Repo, releaseDir)
+	cmd := fmt.Sprintf(`eval "$(ssh-agent -s)" && trap 'kill "$SSH_AGENT_PID"' EXIT && ssh-add %s && git clone --depth 1 -- %s %s`, shellQuote(SSH_KEY), shellQuote(project.Repo), shellQuote(releaseDir))
 	out, err := project.runReleaseCommand(releaseNumberValue, cmd)
 	if err != nil {
-		if LOG_MUTEX {
-			slog.Info("Lock", "project", project.Name)
+		cause := fmt.Errorf("clone failed: %w\n%s", err, out)
+		if restoreErr := restorePreviousProxy(project, releaseNumberValue); restoreErr != nil {
+			return savePromotionError(project, releaseNumberValue, errors.Join(cause, restoreErr))
 		}
-		project.mu.Lock()
-		project.State = fmt.Sprintf("Error: %v\n%s", err, out)
-		project.mu.Unlock()
-		if LOG_MUTEX {
-			slog.Info("Unlock", "project", project.Name)
-		}
-		return project.Save()
+		return discardFailedRelease(project, releaseNumberValue, cause)
 	}
 	return nil
 }
@@ -749,12 +777,11 @@ func (project *Project) Cert() error {
 	if LOG_MUTEX {
 		slog.Info("Lock", "project", project.Name)
 	}
-	nextState := "cleanup"
-	if project.Name == JAKELOUD {
-		nextState = "🟢 running"
-	}
 	project.mu.Lock()
-	project.State = nextState
+	project.State = "cleanup"
+	if project.Name == JAKELOUD {
+		project.State = "🟢 running"
+	}
 	project.mu.Unlock()
 	if LOG_MUTEX {
 		slog.Info("Unlock", "project", project.Name)
@@ -782,6 +809,20 @@ func (project *Project) Cleanup() error {
 			return saveErr
 		}
 		return err
+	}
+	releaseDirs, err := project.ReleaseDirs()
+	if err != nil {
+		return err
+	}
+	for number, dir := range releaseDirs {
+		if number == current {
+			continue
+		}
+		if err := os.RemoveAll(dir); err != nil {
+			project.State = fmt.Sprintf("Error: failed to remove release r%d: %v", number, err)
+			_ = project.Save()
+			return err
+		}
 	}
 
 	if LOG_MUTEX {

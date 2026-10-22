@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -203,7 +204,7 @@ func (project *Project) BuildAndRun() error {
 	return project.buildAndRun(nil)
 }
 
-func (project *Project) buildAndRun(ready chan<- struct{}) error {
+func (project *Project) buildAndRun(ready chan<- struct{}) (resultErr error) {
 	if shuttingDown.Load() {
 		return errors.New("jakeloud is shutting down")
 	}
@@ -221,6 +222,16 @@ func (project *Project) buildAndRun(ready chan<- struct{}) error {
 	if err != nil {
 		return err
 	}
+	launched := false
+	defer func() {
+		if resultErr != nil && !launched {
+			if err := restorePreviousProxy(project, releaseNumber); err != nil {
+				resultErr = savePromotionError(project, releaseNumber, errors.Join(resultErr, err))
+				return
+			}
+			resultErr = discardFailedRelease(project, releaseNumber, resultErr)
+		}
+	}()
 	releaseID := project.ReleaseID(releaseNumber)
 	commands, err := project.deployCommand()
 	if err != nil {
@@ -235,9 +246,6 @@ func (project *Project) buildAndRun(ready chan<- struct{}) error {
 	hasDomain := len(domains) > 0
 
 	project.State = "starting"
-	if !hasDomain {
-		project.State = "cleanup"
-	}
 	if err := project.Save(); err != nil {
 		return err
 	}
@@ -285,7 +293,8 @@ func (project *Project) buildAndRun(ready chan<- struct{}) error {
 	if err := cmd.Start(); err != nil {
 		_ = logFile.Close()
 		project.State = fmt.Sprintf("Error: %v", err)
-		return project.Save()
+		_ = project.Save()
+		return err
 	}
 
 	release := &Release{
@@ -296,23 +305,10 @@ func (project *Project) buildAndRun(ready chan<- struct{}) error {
 		Cmd:         cmd,
 		Done:        make(chan struct{}),
 	}
+	launched = true
 	release.alive.Store(true)
 	registerRelease(release)
 	go waitForRelease(release, logFile)
-
-	if !hasDomain {
-		if err := project.advance(false); err != nil {
-			if ready != nil {
-				close(ready)
-			}
-			return err
-		}
-		release.active.Store(true)
-		if ready != nil {
-			close(ready)
-		}
-		return nil
-	}
 
 	go func() {
 		coordinateReleasePromotion(release)
@@ -337,6 +333,9 @@ func waitForRelease(release *Release, logFile *os.File) {
 	lock := projectLock(release.ProjectName)
 	lock.Lock()
 	defer lock.Unlock()
+	if !release.active.Load() {
+		return
+	}
 	project, getErr := GetProject(release.ProjectName)
 	if getErr != nil {
 		return
@@ -354,28 +353,52 @@ func waitForRelease(release *Release, logFile *os.File) {
 	}
 }
 
+// Promotion and rollback share the project lock, so another deployment cannot
+// reuse a failed release number before rollback has finished.
 func coordinateReleasePromotion(release *Release) {
-	if !release.alive.Load() {
-		return
-	}
-	err := promoteRelease(release)
-	if err != nil && release.alive.Load() {
-		project, projectErr := GetProject(release.ProjectName)
-		if projectErr != nil {
-			return
-		}
-		current, currentErr := project.CurrentReleaseNumber()
-		if currentErr != nil || current != release.Number {
-			return
-		}
-	}
-}
-
-func promoteRelease(release *Release) error {
 	lock := projectLock(release.ProjectName)
 	lock.Lock()
 	defer lock.Unlock()
 
+	err := promoteRelease(release)
+	if err == nil || shuttingDown.Load() || release.active.Load() {
+		return
+	}
+	project, projectErr := GetProject(release.ProjectName)
+	if projectErr != nil {
+		slog.Error("Failed to load rejected release", "release", release.ID, "err", projectErr)
+		return
+	}
+	current, currentErr := project.CurrentReleaseNumber()
+	if currentErr != nil || current != release.Number {
+		return
+	}
+	rollbackFailedRelease(&project, release, err)
+}
+
+// Keep the failure visible even when the previous release is still serving.
+// A failed proxy restoration or process stop must not free the release number.
+func rollbackFailedRelease(project *Project, release *Release, cause error) {
+	if err := restorePreviousProxy(project, release.Number); err != nil {
+		savePromotionError(project, release.Number, fmt.Errorf("%v; proxy rollback failed: %w", cause, err))
+		return
+	}
+	if !shutdownReleaseList([]*Release{release}, 5*time.Second) {
+		savePromotionError(project, release.Number, fmt.Errorf("%v; timed out stopping rejected release", cause))
+		return
+	}
+	discardFailedRelease(project, release.Number, cause)
+}
+
+func discardFailedRelease(project *Project, number int, cause error) error {
+	dir := filepath.Join(project.ProjectDir(), fmt.Sprintf("r%d", number))
+	if err := os.RemoveAll(dir); err != nil {
+		cause = fmt.Errorf("%v; failed to remove release directory: %w", cause, err)
+	}
+	return savePromotionError(project, number, cause)
+}
+
+func promoteRelease(release *Release) error {
 	if shuttingDown.Load() || !release.alive.Load() {
 		return errors.New("release is not alive")
 	}
@@ -413,42 +436,33 @@ func promoteRelease(release *Release) error {
 		return err
 	}
 	if err := project.Proxy(); err != nil {
-		return rollbackPromotion(&project, release, err)
+		return err
 	}
 	if !release.alive.Load() {
-		return rollbackPromotion(&project, release, errors.New("release exited during proxy setup"))
+		return errors.New("release exited during proxy setup")
 	}
 	if project.IsError() {
-		return rollbackPromotion(&project, release, errors.New(project.State))
+		return errors.New(project.State)
 	}
 	if err := project.Cert(); err != nil {
-		return rollbackPromotion(&project, release, err)
+		return err
 	}
 	if !release.alive.Load() {
-		return rollbackPromotion(&project, release, errors.New("release exited during certificate setup"))
+		return errors.New("release exited during certificate setup")
 	}
 	if project.IsError() {
-		return rollbackPromotion(&project, release, errors.New(project.State))
+		return errors.New(project.State)
 	}
+	// Routing is committed. Cleanup may stop the previous release; failures
+	// from this point must leave the new release serving traffic.
+	release.active.Store(true)
 	if err := project.Cleanup(); err != nil {
 		return savePromotionError(&project, release.Number, err)
 	}
-	release.active.Store(true)
 	return nil
 }
 
-func rollbackPromotion(project *Project, release *Release, err error) error {
-	if rollbackErr := restorePreviousProxy(project, release.Number); rollbackErr != nil {
-		err = fmt.Errorf("%v; proxy rollback failed: %w", err, rollbackErr)
-	}
-	return savePromotionError(project, release.Number, err)
-}
-
 func restorePreviousProxy(project *Project, currentRelease int) error {
-	domains, err := project.ProjectDomains()
-	if err != nil || len(domains) == 0 {
-		return err
-	}
 	var previous *Release
 	for _, release := range projectReleases(project.Name, false, currentRelease) {
 		if release.active.Load() && release.alive.Load() && !release.stopRequested.Load() && (previous == nil || release.Number > previous.Number) {
@@ -458,13 +472,24 @@ func restorePreviousProxy(project *Project, currentRelease int) error {
 	if previous == nil {
 		return nil
 	}
-	return project.retargetProxy(previous.Port)
+	domains, err := project.ProjectDomains()
+	if err != nil {
+		return err
+	}
+	if len(domains) > 0 {
+		if err := project.retargetProxy(previous.Port); err != nil {
+			return err
+		}
+	}
+	project.Port = previous.Port
+	return nil
 }
 
 func savePromotionError(project *Project, releaseNumber int, err error) error {
 	project.State = fmt.Sprintf("Error: failed to promote release r%d: %v", releaseNumber, err)
 	if saveErr := project.Save(); saveErr != nil {
 		slog.Info("Failed to save promotion failure", "project", project.Name, "err", saveErr)
+		return errors.Join(err, saveErr)
 	}
 	return err
 }
