@@ -10,6 +10,7 @@ import { RegisterForm } from "@/components/RegisterForm"
 import { ProjectsTab } from "@/components/ProjectsTab"
 import { ProjectView } from "@/components/ProjectView"
 import { SettingsTab } from "@/components/SettingsTab"
+import { AgentSkillCard } from "@/components/AgentSkillCard"
 import { useAuth } from "@/hooks/useAuth"
 import { useApi } from "@/hooks/useApi"
 import { JakeLoudConfig } from "@/types"
@@ -102,6 +103,7 @@ function App() {
           />
         )}
         {activeTab === "settings" && <SettingsTab apps={config.apps} refreshConfig={getConfig} />}
+        <AgentSkillCard />
       </main>
     </div>
   )
