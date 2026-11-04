@@ -3,20 +3,35 @@ import { ChevronDown, Copy, ExternalLink } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 
+const agents: Record<string, string> = {
+  codex: "Codex",
+  opencode: "OpenCode",
+  "claude-code": "Claude Code",
+  cursor: "Cursor",
+  "github-copilot": "GitHub Copilot",
+  "gemini-cli": "Gemini CLI",
+  windsurf: "Windsurf",
+  cline: "Cline",
+  amp: "Amp",
+  roo: "Roo Code",
+}
+
 export function AgentSkillCard() {
   const [method, setMethod] = useState("npx")
-  const [installation, setInstallation] = useState("global")
-  const command = `${method} skills add jakeloud/skill${installation === "global" ? " -g -a codex -a opencode" : ""}`
+  const [installation, setInstallation] = useState("interactive")
+  const command = `${method} skills add jakeloud/skill${installation === "interactive" ? "" : ` -g -a ${installation} -y`}`
 
   const copyCommand = async () => {
     try {
@@ -30,24 +45,21 @@ export function AgentSkillCard() {
   return (
     <Card className="mt-6">
       <CardHeader>
-        <CardTitle>Use JakeLoud with your agent</CardTitle>
-        <CardDescription>
-          Install the JakeLoud skill to help your coding agent work with JakeLoud.
-        </CardDescription>
-        <Button asChild variant="link" className="h-auto justify-self-start p-0">
+        <Button asChild size="lg" className="h-12 justify-between text-base">
           <a href="https://jakeloud.com/" target="_blank" rel="noopener noreferrer">
-            Read the documentation
+            Documentation
             <ExternalLink aria-hidden="true" />
           </a>
         </Button>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="skill-install-method">Installation method</Label>
+      <CardContent className="space-y-3 border-t pt-4">
+        <h2 className="text-sm font-medium text-muted-foreground">Install agent skill</h2>
+        <div className="flex flex-wrap gap-2">
+          <div>
+            <Label htmlFor="skill-install-method" className="sr-only">Installation method</Label>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button id="skill-install-method" variant="outline" className="w-full justify-between">
+                <Button id="skill-install-method" variant="outline" size="sm" className="w-24 justify-between">
                   {method}
                   <ChevronDown aria-hidden="true" />
                 </Button>
@@ -60,29 +72,32 @@ export function AgentSkillCard() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="skill-install-agent">Agent installation</Label>
+          <div className="flex min-w-0 items-center gap-2">
+            <Label htmlFor="skill-install-agent">agent:</Label>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button id="skill-install-agent" variant="outline" className="w-full justify-between">
-                  {installation === "global" ? "Codex + OpenCode (global)" : "Interactive installation"}
+                <Button id="skill-install-agent" variant="outline" size="sm" className="w-full justify-between">
+                  {installation === "interactive" ? "Interactive installation" : `${agents[installation]} (global)`}
                   <ChevronDown aria-hidden="true" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="min-w-[var(--radix-dropdown-menu-trigger-width)]">
                 <DropdownMenuRadioGroup value={installation} onValueChange={setInstallation}>
-                  <DropdownMenuRadioItem value="global">Codex + OpenCode (global)</DropdownMenuRadioItem>
+                  <DropdownMenuLabel>Global installation</DropdownMenuLabel>
+                  {Object.entries(agents).map(([value, label]) => (
+                    <DropdownMenuRadioItem key={value} value={value}>{label}</DropdownMenuRadioItem>
+                  ))}
+                  <DropdownMenuSeparator />
                   <DropdownMenuRadioItem value="interactive">Interactive installation</DropdownMenuRadioItem>
                 </DropdownMenuRadioGroup>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </div>
-        <div className="flex flex-col gap-3 rounded-md border bg-muted p-3 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-2 rounded-md border bg-muted p-2">
           <code className="min-w-0 flex-1 break-all text-sm select-all">{command}</code>
-          <Button type="button" variant="outline" onClick={copyCommand}>
+          <Button type="button" variant="ghost" size="icon" aria-label="Copy command" onClick={copyCommand}>
             <Copy aria-hidden="true" />
-            Copy command
           </Button>
         </div>
       </CardContent>
