@@ -54,6 +54,8 @@ func API(w http.ResponseWriter, r *http.Request) {
 		}
 	case "createAppOp":
 		err = CreateProject(body)
+	case "reorderProjectsOp":
+		err = ReorderProjects(body)
 	case "deleteAppOp":
 		err = DeleteProject(body)
 	default:
