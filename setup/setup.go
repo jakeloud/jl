@@ -12,7 +12,7 @@ func Start(d bool) {
 	dry = d
 	start := time.Now()
 
-	fmt.Printf("Installing required packages\n")
+	fmt.Printf("Installing required packages: nginx certbot python3-certbot-nginx openssh-client git\n")
 	install(dry)
 	err := setupService(dry)
 	if err != nil {
