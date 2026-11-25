@@ -73,3 +73,13 @@ docker build --tag jlt --file=test.Dockerfile .
 docker run --name=jakeloud-test -p 80:80 -p 443:443 -p 666:666 -d jlt
 docker exec -it jakeloud-test sh
 ```
+
+
+## Offtop
+
+Executables that are being run in the jakeloud should be in the path (as per [service file](https://github.com/jakeloud/jl/blob/main/setup/jakeloud.service)).
+For example, to add `bun` and `bunx` to the path, do:
+```bash
+ln -s /root/.bun/bin/bun /usr/local/bin/bun
+ln -s /root/.bun/bin/bunx /usr/local/bin/bunx
+```
